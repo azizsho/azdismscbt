@@ -294,6 +294,38 @@ export class YouTube {
   }
 
   /**
+   * Fetch related tracks from the YouTube mix ("radio") for a video.
+   *
+   * @param {string} videoId
+   * @param {number} [limit]
+   * @returns {Promise<Track[]>}
+   */
+  async related(videoId, limit = 5) {
+    if (!VIDEO_ID_RE.test(videoId)) return [];
+    const count = Math.min(50, Math.max(1, limit));
+    const json = await this.#json([
+      ...this.#baseArgs,
+      '--flat-playlist',
+      '--dump-single-json',
+      '--playlist-end',
+      String(count + 5),
+      '--',
+      `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`,
+    ]);
+
+    const entries = Array.isArray(json.entries) ? json.entries : [];
+    const tracks = [];
+    for (const entry of entries) {
+      const track = this.#entryToTrack(entry);
+      if (!track || track.id === videoId || track.isLive) continue;
+      if (track.durationSec !== null && track.durationSec > this.config.maxTrackSeconds) continue;
+      tracks.push(track);
+      if (tracks.length >= count) break;
+    }
+    return tracks;
+  }
+
+  /**
    * Download the best audio-only stream to the cache directory.
    * Returns the final file path.
    *

@@ -8,6 +8,7 @@ import { createLogger } from './logger.js';
 import { MediaCache } from './music/cache.js';
 import { MusicManager } from './music/manager.js';
 import { YouTube } from './music/youtube.js';
+import { BitrateRestoreStore } from './services/bitrate-restore.js';
 import { startBot } from './bot.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -76,7 +77,10 @@ const cache = new MediaCache({
 });
 await cache.init();
 
-manager = new MusicManager({ config, logger, cache });
+const bitrateRestore = new BitrateRestoreStore(path.join(config.dataDir, 'bitrate-restore.json'));
+await bitrateRestore.load();
+
+manager = new MusicManager({ config, logger, cache, youtube, bitrateRestore });
 
 let app;
 try {
@@ -99,6 +103,7 @@ async function shutdown(signal) {
   try {
     cache.abortAll();
     await manager?.destroyAll();
+    await bitrateRestore.flush();
     app?.client.destroy();
   } catch (error) {
     logger.warn('Shutdown error', error);
@@ -111,6 +116,21 @@ async function shutdown(signal) {
 
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
+// Cross-platform graceful stop used by the Windows scripts. A sentinel file is
+// simpler than an HTTP endpoint and lets Node run its normal shutdown path.
+const shutdownRequestFile = path.join(config.dataDir, 'shutdown.request');
+const shutdownWatcher = setInterval(() => {
+  if (!fsSync.existsSync(shutdownRequestFile)) return;
+  clearInterval(shutdownWatcher);
+  try {
+    fsSync.rmSync(shutdownRequestFile, { force: true });
+  } catch {
+    // Already gone.
+  }
+  void shutdown('control');
+}, 1000);
+shutdownWatcher.unref();
 
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled promise rejection', reason);

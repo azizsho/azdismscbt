@@ -1,3 +1,4 @@
+import { PermissionFlagsBits } from 'discord.js';
 import { GuildPlayer } from './guild-player.js';
 import { UserError } from '../util/errors.js';
 
@@ -7,12 +8,16 @@ export class MusicManager {
    *   config: ReturnType<typeof import('../config.js').loadConfig>,
    *   logger: ReturnType<typeof import('../logger.js').createLogger>,
    *   cache: import('./cache.js').MediaCache,
+   *   youtube?: import('./youtube.js').YouTube,
+   *   bitrateRestore?: import('../services/bitrate-restore.js').BitrateRestoreStore,
    * }} options
    */
   constructor(options) {
     this.config = options.config;
     this.logger = options.logger.child('manager');
     this.cache = options.cache;
+    this.youtube = options.youtube ?? options.cache?.youtube ?? null;
+    this.bitrateRestore = options.bitrateRestore ?? null;
     /** @type {Map<string, GuildPlayer>} */
     this.players = new Map();
   }
@@ -23,7 +28,13 @@ export class MusicManager {
    * @param {import('discord.js').GuildTextBasedChannel} textChannel
    */
   async getOrCreate(guild, voiceChannel, textChannel) {
-    const existing = this.players.get(guild.id);
+    let existing = this.players.get(guild.id);
+    if (existing?.destroyPromise) {
+      // A player can be marked destroyed before its teardown finishes; wait for
+      // the connection cleanup so a new player cannot reuse a dying connection.
+      await existing.destroyPromise;
+      existing = this.players.get(guild.id);
+    }
     if (existing && !existing.destroyed) {
       existing.setTextChannel(textChannel);
       await existing.setVoiceChannel(voiceChannel);
@@ -37,6 +48,8 @@ export class MusicManager {
       config: this.config,
       logger: this.logger,
       cache: this.cache,
+      youtube: this.youtube,
+      bitrateRestore: this.bitrateRestore,
       manager: this,
     });
     this.players.set(guild.id, player);
@@ -75,6 +88,18 @@ export class MusicManager {
     }
   }
 
+  /**
+   * Route a Discord voice-state update to the guild's player, if any.
+   *
+   * @param {string} guildId
+   * @param {import('discord.js').VoiceState} oldState
+   * @param {import('discord.js').VoiceState} newState
+   */
+  handleVoiceStateUpdate(guildId, oldState, newState) {
+    const player = this.players.get(guildId);
+    if (player && !player.destroyed) player.handleVoiceStateUpdate(oldState, newState);
+  }
+
   /** @param {string} trackId */
   isTrackActive(trackId) {
     for (const player of this.players.values()) {
@@ -86,6 +111,40 @@ export class MusicManager {
 
   get size() {
     return this.players.size;
+  }
+
+  /**
+   * Undo bitrate boosts left behind by a crash or hard kill.
+   *
+   * @param {import('discord.js').Client} client
+   */
+  async restorePersistedBitrates(client) {
+    if (!this.bitrateRestore || !this.config.restoreChannelBitrate) return;
+    for (const [key, saved] of this.bitrateRestore.list()) {
+      const [guildId, channelId] = key.split(':');
+      const guild = client.guilds.cache.get(guildId);
+      const channel = guild?.channels.cache.get(channelId);
+      const voiceChannel = /** @type {import('discord.js').VoiceChannel | null} */ (channel);
+      if (!voiceChannel || typeof voiceChannel.setBitrate !== 'function') {
+        this.bitrateRestore.clear(guildId, channelId);
+        continue;
+      }
+      if (voiceChannel.bitrate !== saved.appliedBitrate) {
+        // Someone changed it manually; do not overwrite their value.
+        this.bitrateRestore.clear(guildId, channelId);
+        continue;
+      }
+      const me = guild.members.me;
+      const permissions = me ? voiceChannel.permissionsFor(me) : null;
+      if (!permissions?.has(PermissionFlagsBits.ManageChannels)) continue;
+      try {
+        await voiceChannel.setBitrate(saved.originalBitrate, 'Restore original channel bitrate');
+        this.bitrateRestore.clear(guildId, channelId);
+        this.logger.info(`Restored bitrate for ${channelId} after a restart`);
+      } catch (error) {
+        this.logger.warn(`Could not restore the persisted bitrate for ${channelId}`, error);
+      }
+    }
   }
 
   async destroyAll() {

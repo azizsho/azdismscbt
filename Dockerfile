@@ -5,6 +5,7 @@ FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production \
     FFMPEG_PATH=/usr/bin/ffmpeg \
+    YTDLP_PATH=/usr/local/bin/yt-dlp \
     DATA_DIR=/app/data
 
 RUN apt-get update \
@@ -12,10 +13,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Official standalone Linux build. It bundles the EJS scripts and can use the
-# Node runtime already in this image.
+# Node runtime already in this image. Verify the published SHA-256 checksum so a
+# corrupted or tampered download fails the build.
 RUN curl -fsSL --retry 3 \
       https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
-      -o /usr/local/bin/yt-dlp \
+      -o /tmp/yt-dlp_linux \
+    && curl -fsSL --retry 3 \
+      https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS \
+      -o /tmp/SHA2-256SUMS \
+    && cd /tmp \
+    && grep ' yt-dlp_linux$' SHA2-256SUMS | sha256sum -c - \
+    && mv /tmp/yt-dlp_linux /usr/local/bin/yt-dlp \
     && chmod 0755 /usr/local/bin/yt-dlp \
     && /usr/local/bin/yt-dlp --version
 

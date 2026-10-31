@@ -49,6 +49,12 @@ export async function startBot(deps) {
       );
     }
 
+    try {
+      await manager.restorePersistedBitrates(readyClient);
+    } catch (error) {
+      logger.warn('Could not restore persisted channel bitrates', error);
+    }
+
     if (config.autoDeployCommands) {
       try {
         await deployCommands(config, logger);
@@ -112,6 +118,10 @@ export async function startBot(deps) {
   client.on(Events.Error, (error) => logger.error('Discord client error', error));
   client.on(Events.Warn, (message) => logger.debug(`Discord warning: ${message}`));
   client.on(Events.GuildCreate, (guild) => logger.info(`Joined server: ${guild.name} (${guild.id})`));
+  client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    const guildId = newState.guild?.id ?? oldState.guild?.id;
+    if (guildId) manager.handleVoiceStateUpdate(guildId, oldState, newState);
+  });
   client.on(Events.GuildDelete, async (guild) => {
     const player = manager.get(guild.id);
     if (player) await player.destroy({ silent: true });

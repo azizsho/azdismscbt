@@ -176,6 +176,16 @@ export function loadConfig(env = process.env, options = {}) {
   const nowPlayingMessages = readBool(env, 'NOW_PLAYING_MESSAGES', true, errors);
   const audioNormalize = readBool(env, 'AUDIO_NORMALIZE', false, errors);
   const restoreChannelBitrate = readBool(env, 'RESTORE_CHANNEL_BITRATE', true, errors);
+  const pauseWhenAlone = readBool(env, 'PAUSE_WHEN_ALONE', true, errors);
+  const autoplay = readBool(env, 'AUTOPLAY', false, errors);
+  const leaveWhenAloneSeconds = readInt(
+    env,
+    'LEAVE_WHEN_ALONE_SECONDS',
+    120,
+    { min: 0, max: 86400 },
+    errors,
+  );
+  const autoplayAdd = readInt(env, 'AUTOPLAY_ADD', 5, { min: 1, max: 10 }, errors);
 
   if (errors.length > 0) {
     const error = new Error(`Invalid configuration:\n- ${errors.join('\n- ')}`);
@@ -206,6 +216,10 @@ export function loadConfig(env = process.env, options = {}) {
     nowPlayingMessages,
     audioNormalize,
     restoreChannelBitrate,
+    pauseWhenAlone,
+    leaveWhenAloneSeconds,
+    autoplay,
+    autoplayAdd,
     joinSoundFile,
     leaveSoundFile,
     soundVolume,

@@ -19,16 +19,20 @@ Built with:
 - `/search` shows a numbered, plain-text result list and a select menu for queueing
 - Queue with pagination, remove, move, jump, shuffle, and clear
 - Pause, resume, skip, stop, seek, volume, loop (off/track/queue)
-- Now-playing embed with pause/skip/stop buttons and live progress refresh; re-posted for every new track
-- Queue card below the now-playing embed showing the next 10 tracks; `/queue` shows the full list
+- Now-playing embed with pause/skip/stop/previous/replay/loop/queue buttons and live progress refresh; re-posted for every new track
+- Queue card below the now-playing embed showing the next 10 tracks with requester and “starts in” estimates; `/queue` shows the full list
+- `/search` results can be queued or dismissed with a Cancel button without losing the menu when a pick fails
 - Card titles are plain text (no clickable links); use the menu or buttons to act
 - `/play` replies include a snapshot of up to 10 upcoming tracks
 - Optional DJ role; anyone can skip
-- Automatic voice-channel bitrate boost and restore (if the bot has Manage Channels)
+- Automatic voice-channel bitrate boost and restore (if the bot has Manage Channels), including after a crash
 - Optional short join/leave sound clips
 - Automatic voice reconnect after a brief network drop
+- Pauses while alone in the channel and leaves after a configurable timeout
+- Optional autoplay that appends related tracks when the queue empties
 - Audio cache with 3-track-ahead preloading, so the next songs are already on disk
 - Auto-disconnect after an idle period
+- Fast admin `/status` and `/cache` commands
 - Works on Windows, Linux, and Docker
 - No YouTube API key required
 
@@ -224,7 +228,7 @@ This is how the bot is currently running: it launches `run.ps1` in a hidden wind
 npm run stop
 ```
 
-This stops the wrapper **first** (so it cannot restart the bot), then the Node process. You can confirm with `npm run status`. Discord will show the bot as offline briefly.
+This first asks the bot to shut down gracefully through `data\shutdown.request`, so it can restore the channel bitrate, play the leave clip, and clean up child processes. If the bot does not exit within about 15 seconds, the script force-kills the wrapper and Node process. You can confirm with `npm run status`. Discord will show the bot as offline briefly.
 
 ### Restart it
 
@@ -417,6 +421,10 @@ All settings live in `.env`.
 | `PRELOAD_CONCURRENCY` | `2` | Parallel background downloads (1–4). |
 | `AUTO_SET_CHANNEL_BITRATE` | `true` | Raise channel bitrate when permitted. |
 | `RESTORE_CHANNEL_BITRATE` | `true` | Restore the original bitrate when leaving, if unchanged. |
+| `PAUSE_WHEN_ALONE` | `true` | Pause while no humans are in the voice channel. |
+| `LEAVE_WHEN_ALONE_SECONDS` | `120` | Leave after this long alone. `0` disables. |
+| `AUTOPLAY` | `false` | Queue related tracks when the queue empties. |
+| `AUTOPLAY_ADD` | `5` | Related tracks added per autoplay fetch (1–10). |
 | `YTDLP_CONCURRENCY` | `4` | Global cap on concurrent yt-dlp processes (1–16). |
 | `COMMAND_COOLDOWN_SECONDS` | `2` | Per-user cooldown for `/play` and `/search`. |
 | `YTDLP_MAX_AGE_DAYS` | `45` | Warn at startup when the installed yt-dlp is older. |

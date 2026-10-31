@@ -29,6 +29,8 @@ export class GuildPlayer {
    *   config: ReturnType<typeof import('../config.js').loadConfig>,
    *   logger: ReturnType<typeof import('../logger.js').createLogger>,
    *   cache: import('./cache.js').MediaCache,
+   *   youtube?: import('./youtube.js').YouTube | null,
+   *   bitrateRestore?: import('../services/bitrate-restore.js').BitrateRestoreStore | null,
    *   manager: import('./manager.js').MusicManager,
    * }} options
    */
@@ -40,6 +42,8 @@ export class GuildPlayer {
     this.config = options.config;
     this.logger = options.logger.child(`guild:${options.guild.id}`);
     this.cache = options.cache;
+    this.youtube = options.youtube ?? options.cache?.youtube ?? null;
+    this.bitrateRestore = options.bitrateRestore ?? null;
     this.manager = options.manager;
 
     this.queue = new TrackQueue(options.config.maxQueueSize);
@@ -63,6 +67,8 @@ export class GuildPlayer {
     this.closing = false;
     this.recovering = false;
     this.failureCount = 0;
+    /** @type {Promise<void> | null} */
+    this.destroyPromise = null;
     this.bitrateKbps = 64;
     this.audioMode = '—';
     /** @type {Map<string, { originalBitrate: number, appliedBitrate: number }>} */
@@ -70,6 +76,10 @@ export class GuildPlayer {
 
     /** @type {NodeJS.Timeout | null} */
     this.idleTimer = null;
+    /** @type {NodeJS.Timeout | null} */
+    this.aloneTimer = null;
+    this.autoPausedByEmpty = false;
+    this.autoplaying = false;
     /** @type {AbortController | null} */
     this.abortController = null;
     /** @type {Promise<void> | null} */
@@ -151,6 +161,89 @@ export class GuildPlayer {
         this.connection = null;
       }
     }
+    setImmediate(() => this.#refreshAloneState());
+  }
+
+  /**
+   * React to voice-state changes: keep the cached channel in sync when the bot
+   * is moved, and pause/leave when the channel is empty.
+   *
+   * @param {import('discord.js').VoiceState} oldState
+   * @param {import('discord.js').VoiceState} newState
+   */
+  handleVoiceStateUpdate(oldState, newState) {
+    if (this.destroyed) return;
+    const botId = this.guild.members.me?.id;
+    if (botId && newState.id === botId) {
+      const channelId = newState.channelId;
+      if (channelId && channelId !== this.voiceChannelId) {
+        const channel = this.guild.channels.cache.get(channelId);
+        if (channel && typeof channel.permissionsFor === 'function') {
+          this.voiceChannel = /** @type {import('discord.js').VoiceChannel} */ (channel);
+          this.voiceChannelId = channelId;
+          this.logger.info(`Moved to voice channel ${channelId}`);
+        }
+      }
+      this.#refreshAloneState();
+      return;
+    }
+    if (oldState.channelId === this.voiceChannelId || newState.channelId === this.voiceChannelId) {
+      this.#refreshAloneState();
+    }
+  }
+
+  #refreshAloneState() {
+    if (this.destroyed) return;
+    const members = this.voiceChannel?.members;
+    const humans = members ? [...members.values()].filter((member) => !member.user.bot).length : 1;
+
+    if (humans > 0) {
+      this.#clearAloneTimer();
+      if (this.autoPausedByEmpty) {
+        this.autoPausedByEmpty = false;
+        if (this.player.state.status === AudioPlayerStatus.Paused) {
+          try {
+            this.player.unpause();
+          } catch {
+            // Already resumed.
+          }
+        }
+        void this.#refreshNowPlaying(true);
+      }
+      return;
+    }
+
+    if (this.config.pauseWhenAlone && this.current && !this.isPaused) {
+      this.autoPausedByEmpty = true;
+      try {
+        this.player.pause();
+      } catch {
+        // Nothing playing.
+      }
+      void this.#refreshNowPlaying(true);
+    }
+
+    if (this.config.leaveWhenAloneSeconds > 0 && !this.aloneTimer) {
+      this.aloneTimer = setTimeout(() => {
+        this.aloneTimer = null;
+        if (this.destroyed) return;
+        const stillAlone = !(
+          this.voiceChannel?.members && [...this.voiceChannel.members.values()].some((member) => !member.user.bot)
+        );
+        if (stillAlone) {
+          this.logger.info('Voice channel is empty; leaving');
+          void this.destroy().catch(() => {});
+        }
+      }, this.config.leaveWhenAloneSeconds * 1000);
+      this.aloneTimer.unref?.();
+    }
+  }
+
+  #clearAloneTimer() {
+    if (this.aloneTimer) {
+      clearTimeout(this.aloneTimer);
+      this.aloneTimer = null;
+    }
   }
 
   async connect() {
@@ -189,6 +282,7 @@ export class GuildPlayer {
     // to hand the connection back.
     if (!this.playingSound) this.connection.subscribe(this.player);
     this.#attachConnectionListeners();
+    setImmediate(() => this.#refreshAloneState());
   }
 
   #attachConnectionListeners() {
@@ -268,6 +362,7 @@ export class GuildPlayer {
     this.abortController?.abort();
     this.preloadAbort?.abort();
     this.#clearIdleTimer();
+    this.#clearAloneTimer();
     void this.#removeNowPlaying();
     void this.#restoreChannelBitrate();
     this.currentCleanup?.();
@@ -524,6 +619,12 @@ export class GuildPlayer {
               originalBitrate: original * 1000,
               appliedBitrate: desired * 1000,
             });
+            this.bitrateRestore?.save(
+              this.guild.id,
+              this.voiceChannelId,
+              original * 1000,
+              desired * 1000,
+            );
           }
           this.logger.info(`Set voice channel bitrate to ${desired} kbps`);
         } catch (error) {
@@ -556,9 +657,11 @@ export class GuildPlayer {
           typeof voiceChannel.setBitrate !== 'function' ||
           voiceChannel.bitrate !== restore.appliedBitrate
         ) {
+          this.bitrateRestore?.clear(this.guild.id, channelId);
           continue;
         }
         await voiceChannel.setBitrate(restore.originalBitrate, 'Restore original channel bitrate');
+        this.bitrateRestore?.clear(this.guild.id, channelId);
         this.logger.info(
           `Restored voice channel bitrate to ${Math.round(restore.originalBitrate / 1000)} kbps`,
         );
@@ -598,9 +701,54 @@ export class GuildPlayer {
 
     if (this.queue.length > 0) {
       void this.playNext().catch((error) => this.logger.error('Failed to advance queue', error));
+    } else if (this.config.autoplay && this.loopMode === 'off') {
+      void this.#autoplay(finished);
     } else {
       void this.#removeNowPlaying();
       this.#scheduleIdleDisconnect();
+    }
+  }
+
+  /**
+   * Append related tracks when the queue drains naturally.
+   *
+   * @param {import('./youtube.js').Track} seed
+   */
+  async #autoplay(seed) {
+    if (!this.youtube || !seed?.id || this.destroyed) {
+      void this.#removeNowPlaying();
+      this.#scheduleIdleDisconnect();
+      return;
+    }
+    this.autoplaying = true;
+    const generation = this.generation;
+    try {
+      const related = await this.youtube.related(seed.id, this.config.autoplayAdd ?? 5);
+      if (this.destroyed || generation !== this.generation || this.current || this.queue.length > 0) {
+        return;
+      }
+      const seen = new Set([seed.id, ...this.history.map((track) => track.id)]);
+      let added = 0;
+      for (const track of related) {
+        if (seen.has(track.id) || this.queue.length >= this.config.maxQueueSize) continue;
+        seen.add(track.id);
+        track.requester = { id: 'autoplay', username: 'autoplay', displayName: 'Autoplay' };
+        try {
+          this.enqueue(track);
+          added++;
+        } catch {
+          break;
+        }
+      }
+      if (added > 0) this.logger.info(`Autoplay queued ${added} related track(s)`);
+    } catch (error) {
+      this.logger.debug('Autoplay lookup failed', error);
+    } finally {
+      this.autoplaying = false;
+      if (!this.destroyed && !this.current && this.queue.isEmpty) {
+        void this.#removeNowPlaying();
+        this.#scheduleIdleDisconnect();
+      }
     }
   }
 
@@ -1093,8 +1241,15 @@ export class GuildPlayer {
    * @param {{ silent?: boolean }} [options] `silent` skips the leave clip
    *   (used during process shutdown so exit stays quick).
    */
-  async destroy(options = {}) {
-    if (this.destroyed || this.closing) return;
+  destroy(options = {}) {
+    if (this.destroyPromise) return this.destroyPromise;
+    if (this.destroyed || this.closing) return Promise.resolve();
+    this.destroyPromise = this.#doDestroy(options);
+    return this.destroyPromise;
+  }
+
+  /** @param {{ silent?: boolean }} [options] */
+  async #doDestroy(options = {}) {
     this.closing = true;
     this.destroyed = true;
     this.generation++;
@@ -1102,6 +1257,7 @@ export class GuildPlayer {
     this.abortController = null;
     this.preloadAbort?.abort();
     this.#clearIdleTimer();
+    this.#clearAloneTimer();
     this.currentCleanup?.();
     this.currentCleanup = null;
     this.current = null;
