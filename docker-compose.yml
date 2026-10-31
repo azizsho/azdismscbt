@@ -1,0 +1,18 @@
+services:
+  music-bot:
+    build: .
+    container_name: discord-youtube-music-bot
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /app/data
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      YTDLP_PATH: /usr/local/bin/yt-dlp
+      # Put cookies at ./data/cookies.txt on the host and uncomment:
+      # YOUTUBE_COOKIES_FILE: /app/data/cookies.txt
+    volumes:
+      - ./data:/app/data
+    # Voice is outbound UDP; no ports need to be published.

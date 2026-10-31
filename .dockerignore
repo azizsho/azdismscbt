@@ -1,0 +1,15 @@
+node_modules
+.npm-cache
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+data
+tools
+.tmp
+test
+*.log
+logs
+coverage
+README.md
