@@ -5,26 +5,44 @@ import { formatDuration, formatProgress } from '../util/time.js';
 /** Rows shown on the standalone queue card and the /play confirmation cards. */
 export const QUEUE_PREVIEW_LIMIT = 10;
 
-/** @param {import('../music/youtube.js').Track} track */
-function previewLine(track, index) {
-  return `\`${String(index + 1).padStart(2, ' ')}.\` ${trackTitle(track, 30)} \`${formatDuration(track.durationSec)}\``;
-}
-
 /**
- * @param {import('../music/youtube.js').Track[]} tracks
- * @param {number} limit
+ * @param {import('../music/youtube.js').Track} track
+ * @param {{ requester?: boolean, etaSeconds?: number }} [options]
  */
-function previewLines(tracks, limit) {
-  return tracks.slice(0, limit).map((track, index) => previewLine(track, index));
+function trackMeta(track, options = {}) {
+  const parts = [];
+  if (options.requester && track.requester) {
+    parts.push(escapeMarkdown(truncate(requesterName(track), 20)));
+  }
+  if (options.etaSeconds !== undefined) parts.push(`~${formatDuration(options.etaSeconds)}`);
+  return parts.length > 0 ? ` · ${parts.join(' · ')}` : '';
+}
+
+/**
+ * @param {import('../music/youtube.js').Track} track
+ * @param {number} index
+ * @param {{ requester?: boolean, etaSeconds?: number }} [options]
+ */
+function previewLine(track, index, options = {}) {
+  return `\`${String(index + 1).padStart(2, ' ')}.\` ${trackTitle(track, 30)} \`${formatDuration(track.durationSec)}\`${trackMeta(track, options)}`;
 }
 
 /**
  * @param {import('../music/youtube.js').Track[]} tracks
  * @param {number} limit
- * @param {{ remainder?: boolean }} [options]
+ * @param {{ requester?: boolean, etaSeconds?: number }} [options]
+ */
+function previewLines(tracks, limit, options = {}) {
+  return tracks.slice(0, limit).map((track, index) => previewLine(track, index, options));
+}
+
+/**
+ * @param {import('../music/youtube.js').Track[]} tracks
+ * @param {number} limit
+ * @param {{ remainder?: boolean, requester?: boolean, etaSeconds?: number }} [options]
  */
 function previewValue(tracks, limit, options = {}) {
-  const lines = previewLines(tracks, limit);
+  const lines = previewLines(tracks, limit, options);
   if (options.remainder !== false && tracks.length > limit) {
     lines.push(`…and **${tracks.length - limit}** more — use \`/queue\``);
   }
@@ -124,8 +142,9 @@ export function playlistAddedEmbed(config, playlist) {
  *
  * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/youtube.js').Track[]} tracks
+ * @param {{ currentRemainingSec?: number }} [options]
  */
-export function queueBoardEmbed(config, tracks) {
+export function queueBoardEmbed(config, tracks, options = {}) {
   if (tracks.length === 0) {
     return baseEmbed(config, 'Queue').setDescription('*The queue is empty.*');
   }
@@ -136,8 +155,15 @@ export function queueBoardEmbed(config, tracks) {
       ? `Showing ${QUEUE_PREVIEW_LIMIT} of ${tracks.length} • ${formatDuration(totalSec)} total • /queue for the full list`
       : `${tracks.length} track(s) • ${formatDuration(totalSec)} total`;
 
+  let eta = Math.max(0, Math.floor(options.currentRemainingSec ?? 0));
+  const lines = tracks.slice(0, QUEUE_PREVIEW_LIMIT).map((track, index) => {
+    const line = previewLine(track, index, { requester: true, etaSeconds: eta });
+    eta += track.durationSec ?? 0;
+    return line;
+  });
+
   return baseEmbed(config, 'Queue')
-    .setDescription(truncate(previewLines(tracks, QUEUE_PREVIEW_LIMIT).join('\n'), 4000))
+    .setDescription(truncate(lines.join('\n'), 4000))
     .setFooter({ text: truncate(footer, 2048) });
 }
 
@@ -196,6 +222,12 @@ export function queueEmbed(config, player, page, pageSize = 10) {
     lines.push('**Now playing**\nNothing.');
   }
 
+  let eta =
+    player.current?.durationSec !== null && player.current?.durationSec !== undefined
+      ? Math.max(0, player.current.durationSec - Math.floor(player.positionMs / 1000))
+      : 0;
+  for (let i = 0; i < start; i++) eta += tracks[i]?.durationSec ?? 0;
+
   lines.push('');
   if (slice.length === 0) {
     lines.push('*The queue is empty.*');
@@ -205,8 +237,9 @@ export function queueEmbed(config, player, page, pageSize = 10) {
       const track = slice[i];
       const position = start + i + 1;
       lines.push(
-        `\`${String(position).padStart(2, ' ')}.\` ${trackTitle(track)} \`${formatDuration(track.durationSec)}\``,
+        `\`${String(position).padStart(2, ' ')}.\` ${trackTitle(track)} \`${formatDuration(track.durationSec)}\`${trackMeta(track, { requester: true, etaSeconds: eta })}`,
       );
+      eta += track.durationSec ?? 0;
     }
   }
 

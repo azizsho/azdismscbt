@@ -303,7 +303,8 @@ export class GuildPlayer {
       void this.playNext().catch((error) => {
         this.logger.error('playNext failed after enqueue', error);
       });
-    } else {
+    } else if (!this.starting) {
+      // Do not compete with the foreground track while it is still downloading.
       this.#startPreload();
     }
     return position;
@@ -734,6 +735,30 @@ export class GuildPlayer {
     this.loopMode = mode;
   }
 
+  /**
+   * Replay the most recently finished track, or restart the current track when
+   * there is no history.
+   *
+   * @returns {Promise<{ restarted: boolean, track: import('./youtube.js').Track | null }>}
+   */
+  async previous() {
+    if (this.destroyed) throw new UserError('This player is closed.');
+    const prev = this.history.shift();
+    if (!prev) {
+      if (!this.current) throw new UserError('Nothing is playing right now.');
+      await this.seek(0);
+      return { restarted: true, track: this.current };
+    }
+    try {
+      this.queue.addNext({ ...prev });
+    } catch (error) {
+      this.history.unshift(prev);
+      throw error;
+    }
+    this.skip(1);
+    return { restarted: false, track: prev };
+  }
+
   /** @param {number} position 1-based */
   jump(position) {
     if (position < 1 || position > this.queue.length) {
@@ -985,7 +1010,11 @@ export class GuildPlayer {
       .join(',')}`;
     if (this.queueMessage && signature === this.queueBoardSignature) return;
 
-    const embed = queueBoardEmbed(this.config, tracks);
+    const currentRemainingSec =
+      this.current?.durationSec !== null && this.current?.durationSec !== undefined
+        ? Math.max(0, this.current.durationSec - Math.floor(this.positionMs / 1000))
+        : 0;
+    const embed = queueBoardEmbed(this.config, tracks, { currentRemainingSec });
     try {
       if (this.queueMessage) {
         await this.queueMessage.edit({ embeds: [embed] });

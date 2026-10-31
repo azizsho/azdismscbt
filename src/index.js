@@ -63,7 +63,7 @@ void youtube
       logger.info(`yt-dlp ${info.version} (${age})`);
     }
   })
-  .catch((error) => logger.debug('yt-dlp version check failed', error));
+  .catch((error) => logger.warn('yt-dlp version check failed; downloads may be affected', error));
 /** @type {MusicManager | null} */
 let manager = null;
 const cache = new MediaCache({
@@ -71,6 +71,7 @@ const cache = new MediaCache({
   maxBytes: config.cacheMaxBytes,
   youtube,
   logger,
+  tempDir: config.tempDir,
   isProtected: (id) => manager?.isTrackActive(id) ?? false,
 });
 await cache.init();
@@ -96,6 +97,7 @@ async function shutdown(signal) {
   const force = setTimeout(() => process.exit(1), 10_000);
   force.unref();
   try {
+    cache.abortAll();
     await manager?.destroyAll();
     app?.client.destroy();
   } catch (error) {

@@ -34,6 +34,7 @@ const cache = new MediaCache({
   maxBytes: config.cacheMaxBytes,
   youtube: { download: async () => { throw new Error('diagnostics only'); } },
   logger: createLogger('silent', 'doctor-cache'),
+  tempDir: config.tempDir,
 });
 await cache.init({ prune: false });
 

@@ -18,3 +18,15 @@ test('now-playing pause button reflects the paused state', () => {
   assert.equal(row.components[0].label, 'Resume');
   assert.equal(row.components[0].emoji.name, '▶️');
 });
+
+test('now-playing card exposes previous, replay, loop, and queue controls', () => {
+  const rows = nowPlayingButtons('123456789012345678', false, 'dQw4w9WgXcQ');
+  assert.equal(rows.length, 2);
+  const ids = rows[1].toJSON().components.map((component) => component.custom_id);
+  assert.deepEqual(ids, [
+    'np:previous:123456789012345678:dQw4w9WgXcQ',
+    'np:replay:123456789012345678:dQw4w9WgXcQ',
+    'np:loop:123456789012345678:dQw4w9WgXcQ',
+    'np:queue:123456789012345678:dQw4w9WgXcQ',
+  ]);
+});

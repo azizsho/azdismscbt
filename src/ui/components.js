@@ -62,6 +62,28 @@ export function nowPlayingButtons(guildId, paused, trackId) {
         .setEmoji('⏹️')
         .setStyle(ButtonStyle.Danger),
     ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`np:previous:${suffix}`)
+        .setLabel('Previous')
+        .setEmoji('⏮️')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`np:replay:${suffix}`)
+        .setLabel('Replay')
+        .setEmoji('↺')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`np:loop:${suffix}`)
+        .setLabel('Loop')
+        .setEmoji('🔁')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`np:queue:${suffix}`)
+        .setLabel('Queue')
+        .setEmoji('📋')
+        .setStyle(ButtonStyle.Secondary),
+    ),
   ];
 }
 

@@ -156,6 +156,7 @@ export class YouTube {
       '--no-update',
       '--no-warnings',
       '--no-progress',
+      '--no-mtime',
       '--socket-timeout',
       '20',
       '--retries',
@@ -320,9 +321,10 @@ export class YouTube {
       track.url,
     ];
 
-    const stdout = await this.#run(args, {
+    const timeoutMinutes = Math.max(10, this.config.ytdlpDownloadTimeoutMinutes ?? 30);
+    const stdout = await this.#runWithClientFallback(args, {
       signal: options.signal,
-      timeoutMs: 10 * 60 * 1000,
+      timeoutMs: timeoutMinutes * 60 * 1000,
       label: 'download',
     });
 
@@ -395,7 +397,7 @@ export class YouTube {
    * @returns {Promise<any>}
    */
   async #json(args) {
-    const stdout = await this.#run(args, { timeoutMs: 60_000, label: 'metadata' });
+    const stdout = await this.#runWithClientFallback(args, { timeoutMs: 60_000, label: 'metadata' });
     try {
       return JSON.parse(stdout);
     } catch (error) {
@@ -457,6 +459,53 @@ export class YouTube {
     } finally {
       this.semaphore.release();
     }
+  }
+
+  /**
+   * Retry with a different YouTube player client when yt-dlp reports a 403 or
+   * an extraction failure. This is the cheapest recovery for YouTube changes.
+   *
+   * @param {string[]} args
+   * @param {{ signal?: AbortSignal, timeoutMs?: number, label?: string }} [options]
+   * @returns {Promise<string>}
+   */
+  async #runWithClientFallback(args, options = {}) {
+    try {
+      return await this.#run(args, options);
+    } catch (error) {
+      if (!(error instanceof UserError) || !['YOUTUBE_403', 'YTDLP_EXTRACT'].includes(error.code)) {
+        throw error;
+      }
+      let lastError = error;
+      for (const client of ['tv', 'web_embedded']) {
+        try {
+          this.logger.warn(`Retrying yt-dlp with player_client=${client}`);
+          return await this.#run(this.#withClient(args, client), options);
+        } catch (retryError) {
+          lastError = retryError;
+          if (!(retryError instanceof UserError) || !['YOUTUBE_403', 'YTDLP_EXTRACT'].includes(retryError.code)) {
+            throw retryError;
+          }
+        }
+      }
+      throw lastError;
+    }
+  }
+
+  /**
+   * Insert `--extractor-args` before the `--` terminator.
+   *
+   * @param {string[]} args
+   * @param {string} client
+   * @returns {string[]}
+   */
+  #withClient(args, client) {
+    const copy = [...args];
+    const index = copy.lastIndexOf('--');
+    const inject = ['--extractor-args', `youtube:player_client=${client}`];
+    if (index === -1) copy.push(...inject);
+    else copy.splice(index, 0, ...inject);
+    return copy;
   }
 
   /**

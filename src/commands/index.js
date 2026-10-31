@@ -18,6 +18,8 @@ import jump from './jump.js';
 import history from './history.js';
 import help from './help.js';
 import diagnose from './diagnose.js';
+import status from './status.js';
+import cache from './cache.js';
 
 export const commands = [
   play,
@@ -40,6 +42,8 @@ export const commands = [
   history,
   help,
   diagnose,
+  status,
+  cache,
 ];
 
 export const commandMap = new Map(commands.map((command) => [command.data.name, command]));

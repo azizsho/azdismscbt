@@ -111,6 +111,13 @@ export function loadConfig(env = process.env, options = {}) {
   const ytdlpConcurrency = readInt(env, 'YTDLP_CONCURRENCY', 4, { min: 1, max: 16 }, errors);
   const commandCooldownSeconds = readInt(env, 'COMMAND_COOLDOWN_SECONDS', 2, { min: 0, max: 60 }, errors);
   const ytdlpMaxAgeDays = readInt(env, 'YTDLP_MAX_AGE_DAYS', 45, { min: 0, max: 3650 }, errors);
+  const ytdlpDownloadTimeoutMinutes = readInt(
+    env,
+    'YTDLP_DOWNLOAD_TIMEOUT_MINUTES',
+    30,
+    { min: 10, max: 240 },
+    errors,
+  );
 
   const embedColorRaw = readString(env, 'EMBED_COLOR', '#5865F2');
   const colorMatch = embedColorRaw.match(HEX_COLOR_RE);
@@ -194,6 +201,7 @@ export function loadConfig(env = process.env, options = {}) {
     ytdlpConcurrency,
     commandCooldownSeconds,
     ytdlpMaxAgeDays,
+    ytdlpDownloadTimeoutMinutes,
     autoDeployCommands,
     nowPlayingMessages,
     audioNormalize,

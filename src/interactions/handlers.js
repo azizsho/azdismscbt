@@ -61,6 +61,50 @@ export async function handleButton(interaction, ctx) {
     }
     const currentTrackId = player.current.id;
 
+    if (action === 'previous') {
+      const result = await player.previous();
+      await interaction.reply({
+        content: result.restarted
+          ? 'Restarted the current track.'
+          : `Replaying **${result.track?.title ?? 'the previous track'}**.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (action === 'replay') {
+      await player.seek(0);
+      await interaction.reply({
+        content: 'Replaying the current track from the start.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (action === 'loop') {
+      if (!player.isDJ(interaction.member, interaction.memberPermissions)) {
+        throw new UserError('You need the DJ role (or Manage Server) to change loop mode.');
+      }
+      const modes = ['off', 'track', 'queue'];
+      const nextMode = modes[(modes.indexOf(player.loopMode) + 1) % modes.length];
+      player.setLoop(nextMode);
+      await interaction.update({
+        embeds: [nowPlayingEmbed(ctx.config, player)],
+        components: nowPlayingButtons(guildId, player.isPaused, currentTrackId),
+      });
+      return;
+    }
+
+    if (action === 'queue') {
+      const rendered = queueEmbed(ctx.config, player, 1);
+      await interaction.reply({
+        embeds: [rendered.embed],
+        components: queueButtons(rendered.page, rendered.totalPages, interaction.user.id),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     if (action === 'toggle') {
       if (player.isPaused) player.resume();
       else player.pause();

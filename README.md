@@ -348,6 +348,8 @@ docker compose up -d
 | `/disconnect` | Leave voice and clear the queue |
 | `/help` | In-Discord command list |
 | `/diagnose` | Admin-only host/tool/YouTube check |
+| `/status` | Admin-only uptime, player, cache, and yt-dlp summary |
+| `/cache stats\|clear` | Admin-only cache usage and clearing |
 
 ### DJ behavior
 
@@ -418,6 +420,7 @@ All settings live in `.env`.
 | `YTDLP_CONCURRENCY` | `4` | Global cap on concurrent yt-dlp processes (1–16). |
 | `COMMAND_COOLDOWN_SECONDS` | `2` | Per-user cooldown for `/play` and `/search`. |
 | `YTDLP_MAX_AGE_DAYS` | `45` | Warn at startup when the installed yt-dlp is older. |
+| `YTDLP_DOWNLOAD_TIMEOUT_MINUTES` | `30` | Per-track download timeout. |
 | `JOIN_SOUND_FILE` | empty | Optional clip played when joining voice. |
 | `LEAVE_SOUND_FILE` | empty | Optional clip played when leaving voice. |
 | `SOUND_VOLUME` | `100` | Volume for join/leave clips (0–200). |
