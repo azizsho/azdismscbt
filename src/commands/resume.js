@@ -10,7 +10,7 @@ export default {
 
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
-   * @param {{ config: ReturnType<import('../config.js').loadConfig>, music: import('../music/manager.js').MusicManager }} ctx
+   * @param {{ config: ReturnType<typeof import('../config.js').loadConfig>, music: import('../music/manager.js').MusicManager }} ctx
    */
   async execute(interaction, ctx) {
     const player = requirePlayer(interaction, ctx.music, {

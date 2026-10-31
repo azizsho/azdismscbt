@@ -29,7 +29,7 @@ export default {
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
    * @param {{
-   *   config: ReturnType<import('../config.js').loadConfig>,
+   *   config: ReturnType<typeof import('../config.js').loadConfig>,
    *   music: import('../music/manager.js').MusicManager,
    *   youtube: import('../music/youtube.js').YouTube,
    * }} ctx

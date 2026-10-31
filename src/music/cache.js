@@ -15,7 +15,7 @@ export class MediaCache {
    *   dir: string,
    *   maxBytes: number,
    *   youtube: import('./youtube.js').YouTube,
-   *   logger: ReturnType<import('../logger.js').createLogger>,
+   *   logger: ReturnType<typeof import('../logger.js').createLogger>,
    *   isProtected?: (id: string) => boolean,
    * }} options
    */
@@ -157,11 +157,6 @@ export class MediaCache {
   /** @param {string} trackId */
   has(trackId) {
     return this.entries.has(trackId);
-  }
-
-  /** @param {string} trackId */
-  getPath(trackId) {
-    return this.entries.get(trackId)?.path ?? null;
   }
 
   /** Remove every cached file. Used by tests and maintenance scripts. */

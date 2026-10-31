@@ -26,8 +26,8 @@ export class GuildPlayer {
    *   guild: import('discord.js').Guild,
    *   voiceChannel: import('discord.js').VoiceChannel,
    *   textChannel: import('discord.js').GuildTextBasedChannel,
-   *   config: ReturnType<import('../config.js').loadConfig>,
-   *   logger: ReturnType<import('../logger.js').createLogger>,
+   *   config: ReturnType<typeof import('../config.js').loadConfig>,
+   *   logger: ReturnType<typeof import('../logger.js').createLogger>,
    *   cache: import('./cache.js').MediaCache,
    *   manager: import('./manager.js').MusicManager,
    * }} options
@@ -62,6 +62,7 @@ export class GuildPlayer {
     this.destroyed = false;
     this.closing = false;
     this.recovering = false;
+    this.failureCount = 0;
     this.bitrateKbps = 64;
     this.audioMode = '—';
     /** @type {Map<string, { originalBitrate: number, appliedBitrate: number }>} */
@@ -548,14 +549,15 @@ export class GuildPlayer {
         const channel =
           this.guild.channels.cache.get(channelId) ??
           (this.voiceChannelId === channelId ? this.voiceChannel : null);
+        const voiceChannel = /** @type {import('discord.js').VoiceChannel | null} */ (channel);
         if (
-          !channel ||
-          typeof channel.setBitrate !== 'function' ||
-          channel.bitrate !== restore.appliedBitrate
+          !voiceChannel ||
+          typeof voiceChannel.setBitrate !== 'function' ||
+          voiceChannel.bitrate !== restore.appliedBitrate
         ) {
           continue;
         }
-        await channel.setBitrate(restore.originalBitrate, 'Restore original channel bitrate');
+        await voiceChannel.setBitrate(restore.originalBitrate, 'Restore original channel bitrate');
         this.logger.info(
           `Restored voice channel bitrate to ${Math.round(restore.originalBitrate / 1000)} kbps`,
         );
@@ -743,8 +745,8 @@ export class GuildPlayer {
   }
 
   /**
-   * @param {import('discord.js').GuildMember | null} member
-   * @param {import('discord.js').PermissionsBitField | null} [permissions]
+   * @param {import('discord.js').GuildMember | import('discord.js').APIInteractionGuildMember | null} member
+   * @param {Readonly<import('discord.js').PermissionsBitField> | null} [permissions]
    */
   isDJ(member, permissions = null) {
     if (this.config.djRoleIds.length === 0) return true;
@@ -851,7 +853,7 @@ export class GuildPlayer {
     }
   }
 
-  /** @param {unknown} error */
+  /** @param {any} error */
   #isUnknownMessage(error) {
     return error?.code === 10008 || error?.status === 404 || error?.statusCode === 404;
   }

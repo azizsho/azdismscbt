@@ -57,9 +57,9 @@ function runCommand(command, args, options = {}) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/cache.js').MediaCache} cache
- * @param {ReturnType<import('../logger.js').createLogger>} logger
+ * @param {ReturnType<typeof import('../logger.js').createLogger>} logger
  * @returns {Promise<Array<{ name: string, ok: boolean, detail: string }>>}
  */
 export async function runDiagnostics(config, cache, logger) {
@@ -151,7 +151,7 @@ export async function runDiagnostics(config, cache, logger) {
       },
     );
     let ok = false;
-    let detail = 'search failed';
+    let detail;
     if (search.code === 0) {
       try {
         const json = JSON.parse(search.stdout);

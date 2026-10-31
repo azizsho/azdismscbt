@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { commandPayloads, commands } from '../src/commands/index.js';
+import { helpEmbed } from '../src/ui/embeds.js';
 
 test('all command names are unique and valid', () => {
   const payloads = commandPayloads();
@@ -21,6 +22,15 @@ test('every command has a description and execute function', () => {
     assert.equal(typeof command.data.description, 'string');
     assert.ok(command.data.description.length > 0);
     assert.equal(typeof command.execute, 'function');
+  }
+});
+
+test('help embed lists every registered command', () => {
+  const embed = helpEmbed({ embedColor: 0x5865f2 }, commands);
+  const description = embed.data.description;
+  assert.ok(description.includes('YouTube'));
+  for (const command of commands) {
+    assert.match(description, new RegExp(`/${command.data.name}(?![a-z0-9-])`));
   }
 });
 

@@ -222,7 +222,7 @@ async function main() {
   if (createdEnv) log(`  ${step++}. Open .env and fill in your bot token and application ID.`);
   log(`  ${step++}. Run: npm run doctor`);
   log(`  ${step++}. Run: npm run deploy`);
-  log(`  ${step++}. Run: npm start`);
+  log(`  ${step}. Run: npm start`);
   log('');
   log('For a Windows boot task, run (in an elevated PowerShell):');
   log('  powershell -ExecutionPolicy Bypass -File scripts/install-windows-task.ps1');

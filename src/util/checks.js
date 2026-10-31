@@ -2,8 +2,8 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { UserError, NoVoiceError } from '../util/errors.js';
 
 /**
- * @param {import('discord.js').ChatInputCommandInteraction} interaction
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {import('discord.js').Interaction} interaction
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  */
 export function assertAllowedChannel(interaction, config) {
   if (config.allowedTextChannelIds.length === 0) return;
@@ -16,14 +16,15 @@ export function assertAllowedChannel(interaction, config) {
  * Ensure the command was used by a member in a voice channel, and that the bot
  * has permission to join and speak there.
  *
- * @param {import('discord.js').ChatInputCommandInteraction} interaction
+ * @param {import('discord.js').RepliableInteraction} interaction
  * @param {{ requireSameChannel?: boolean, player?: import('../music/guild-player.js').GuildPlayer | null }} [options]
  * @returns {import('discord.js').VoiceChannel}
  */
 export function requireVoice(interaction, options = {}) {
   if (!interaction.guild) throw new UserError('This command only works in a server.');
   const member = interaction.member;
-  const channel = member?.voice?.channel;
+  const memberVoice = member && 'voice' in member ? member.voice : null;
+  const channel = memberVoice?.channel;
   if (!channel) throw new NoVoiceError();
   if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) {
     throw new NoVoiceError('Join a regular voice channel first.');
@@ -55,11 +56,11 @@ export function requireVoice(interaction, options = {}) {
     throw new UserError('Stage channels are not supported yet. Use a normal voice channel.');
   }
 
-  return channel;
+  return /** @type {import('discord.js').VoiceChannel} */ (channel);
 }
 
 /**
- * @param {import('discord.js').ChatInputCommandInteraction} interaction
+ * @param {import('discord.js').RepliableInteraction} interaction
  * @param {import('../music/manager.js').MusicManager} music
  * @param {{ requireCurrent?: boolean, requireSameChannel?: boolean }} [options]
  */
@@ -73,7 +74,9 @@ export function requirePlayer(interaction, music, options = {}) {
     throw new UserError('Nothing is playing right now.');
   }
   if (options.requireSameChannel) {
-    const channel = interaction.member?.voice?.channel;
+    const member = interaction.member;
+    const memberVoice = member && 'voice' in member ? member.voice : null;
+    const channel = memberVoice?.channel;
     if (!channel || channel.id !== player.voiceChannelId) {
       throw new UserError(`Join <#${player.voiceChannelId}> to control playback.`);
     }
@@ -83,7 +86,7 @@ export function requirePlayer(interaction, music, options = {}) {
 
 /**
  * @param {import('../music/guild-player.js').GuildPlayer} player
- * @param {import('discord.js').ChatInputCommandInteraction} interaction
+ * @param {import('discord.js').RepliableInteraction} interaction
  */
 export function requireDJ(interaction, player) {
   if (!player.isDJ(interaction.member, interaction.memberPermissions)) {
@@ -91,12 +94,4 @@ export function requireDJ(interaction, player) {
   }
 }
 
-/**
- * The bot's own member object, for permission checks.
- * @param {import('discord.js').Guild} guild
- */
-export function botMember(guild) {
-  const me = guild.members.me;
-  if (!me) throw new UserError('I am not fully connected to this server yet. Try again in a moment.');
-  return me;
-}
+

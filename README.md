@@ -181,13 +181,13 @@ Remove it with:
 powershell -ExecutionPolicy Bypass -File scripts/uninstall-windows-task.ps1
 ```
 
-> The task runs from whichever folder you installed the bot in. If the folder is inside OneDrive or another synced location, pause syncing or move it to a simple local path such as `D:\DiscordMusicBot` so SYSTEM can read it reliably.
+> The task runs from whichever folder you installed the bot in. If the folder is inside OneDrive or another synced location, pause syncing or move it to a simple local path such as `D:\<install-dir>` so SYSTEM can read it reliably.
 
 ---
 
 ## Managing the bot
 
-Run these from `D:\DiscordMusicBot`.
+Run these from your bot's install folder.
 
 ### Check whether it is running
 
@@ -201,8 +201,8 @@ Example:
 DiscordMusicBot
   Bot:      RUNNING  PID 25728  started 27/10/2026 2:22:56 AM
   Wrapper:  RUNNING  PID 25792
-  Folder:   D:\DiscordMusicBot
-  Log:      D:\DiscordMusicBot\data\logs\bot.log
+  Folder:   D:\<install-dir>
+  Log:      D:\<install-dir>\data\logs\bot.log
 
 Recent log:
 ...
@@ -426,7 +426,10 @@ All settings live in `.env`.
 | `NOW_PLAYING_MESSAGES` | `true` | Send an embed when a track starts. |
 | `YOUTUBE_COOKIES_FILE` | empty | Path to Netscape `cookies.txt`. |
 | `AUDIO_CACHE_MAX_MB` | `2048` | Disk cache cap. |
+| `AUDIO_CACHE_DIR` | `./data/cache` | Downloaded audio location. |
 | `DATA_DIR` | `./data` | Cache, cookies, logs, command hash. |
+| `TEMP_DIR` | `./data/tmp` | Temp files for yt-dlp/ffmpeg. |
+| `YTDLP_CACHE_DIR` | `./data/yt-dlp-cache` | yt-dlp signature/player caches. |
 | `FFMPEG_PATH` | bundled | Override ffmpeg binary. |
 | `YTDLP_PATH` | `tools/yt-dlp` | Override yt-dlp binary. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`, `silent`. |
@@ -513,12 +516,6 @@ Audio downloads are cached in:
 
 ```
 <project>\data\cache\
-```
-
-For this installation that is:
-
-```
-D:\DiscordMusicBot\data\cache\
 ```
 
 Files are named after the YouTube video ID, for example `dQw4w9WgXcQ.webm`. The `.webm` file is audio-only (usually Opus); no video is downloaded. The bot also uses:

@@ -6,7 +6,6 @@ import {
   canonicalizeYouTubeUrl,
   extractPlaylistId,
   extractVideoId,
-  isPlaylistUrl,
   isYouTubeUrl,
   sanitizeQuery,
 } from '../util/url.js';
@@ -29,7 +28,9 @@ class Semaphore {
       this.active++;
       return;
     }
-    await new Promise((resolve) => this.waiting.push(resolve));
+    /** @type {Promise<void>} */
+    const slot = new Promise((resolve) => this.waiting.push(() => resolve()));
+    await slot;
     this.active++;
   }
 
@@ -138,8 +139,8 @@ function numberOrNull(value) {
 
 export class YouTube {
   /**
-   * @param {ReturnType<import('../config.js').loadConfig>} config
-   * @param {ReturnType<import('../logger.js').createLogger>} logger
+   * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+   * @param {ReturnType<typeof import('../logger.js').createLogger>} logger
    */
   constructor(config, logger) {
     this.config = config;
@@ -387,8 +388,7 @@ export class YouTube {
 
   /**
    * @param {string[]} args
-   * @param {{ signal?: AbortSignal, timeoutMs?: number, label?: string }} [options]
-   * @returns {Promise<string>}
+   * @returns {Promise<any>}
    */
   async #json(args) {
     const stdout = await this.#run(args, { timeoutMs: 60_000, label: 'metadata' });
@@ -416,7 +416,7 @@ export class YouTube {
       return this.versionInfo;
     }
 
-    let version = null;
+    let version;
     try {
       const stdout = await this.#run(['--version'], { timeoutMs: 20_000, label: 'version' });
       version = stdout.trim().split(/\r?\n/)[0] ?? null;

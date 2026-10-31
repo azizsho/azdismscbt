@@ -21,7 +21,7 @@ test('queue adds, shifts, and reports positions', () => {
   assert.equal(queue.add(track('a')), 1);
   assert.equal(queue.addNext(track('b')), 1);
   assert.equal(queue.length, 2);
-  assert.equal(queue.peek().id, 'b');
+  assert.equal(queue.tracks[0].id, 'b');
   assert.equal(queue.shift().id, 'b');
   assert.equal(queue.length, 1);
 });

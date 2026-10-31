@@ -12,9 +12,9 @@ export default {
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
    * @param {{
-   *   config: ReturnType<import('../config.js').loadConfig>,
+   *   config: ReturnType<typeof import('../config.js').loadConfig>,
    *   cache: import('../music/cache.js').MediaCache,
-   *   logger: ReturnType<import('../logger.js').createLogger>,
+   *   logger: ReturnType<typeof import('../logger.js').createLogger>,
    * }} ctx
    */
   async execute(interaction, ctx) {

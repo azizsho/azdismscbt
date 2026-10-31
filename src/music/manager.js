@@ -4,8 +4,8 @@ import { UserError } from '../util/errors.js';
 export class MusicManager {
   /**
    * @param {{
-   *   config: ReturnType<import('../config.js').loadConfig>,
-   *   logger: ReturnType<import('../logger.js').createLogger>,
+   *   config: ReturnType<typeof import('../config.js').loadConfig>,
+   *   logger: ReturnType<typeof import('../logger.js').createLogger>,
    *   cache: import('./cache.js').MediaCache,
    * }} options
    */

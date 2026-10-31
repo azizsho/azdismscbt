@@ -7,9 +7,14 @@ import {
 import { searchSelectOptions } from './embeds.js';
 
 /**
+ * Discord's builder generics are awkward to express through JSDoc, so these
+ * helpers deliberately return loose component arrays; the call sites only pass
+ * them straight to discord.js.
+ *
  * @param {number} page
  * @param {number} totalPages
  * @param {string} userId
+ * @returns {any[]}
  */
 export function queueButtons(page, totalPages, userId) {
   if (totalPages <= 1) return [];
@@ -35,6 +40,7 @@ export function queueButtons(page, totalPages, userId) {
  * @param {string} guildId
  * @param {boolean} paused
  * @param {string} trackId
+ * @returns {any[]}
  */
 export function nowPlayingButtons(guildId, paused, trackId) {
   const suffix = `${guildId}:${trackId}`;
@@ -62,6 +68,7 @@ export function nowPlayingButtons(guildId, paused, trackId) {
 /**
  * @param {string} token
  * @param {import('../music/youtube.js').Track[]} tracks
+ * @returns {any[]}
  */
 export function searchSelect(token, tracks) {
   const menu = new StringSelectMenuBuilder()

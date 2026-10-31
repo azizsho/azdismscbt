@@ -32,7 +32,7 @@ function previewValue(tracks, limit, options = {}) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {string} [title]
  */
 function baseEmbed(config, title) {
@@ -58,7 +58,7 @@ export function requesterName(track) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/youtube.js').Track} track
  * @param {{ position?: number, playlist?: string, queue?: import('../music/youtube.js').Track[] }} [options]
  */
@@ -85,7 +85,7 @@ export function addedEmbed(config, track, options = {}) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {{ title: string, count: number, skipped?: number, queue?: import('../music/youtube.js').Track[] }} playlist
  */
 export function playlistAddedEmbed(config, playlist) {
@@ -102,7 +102,7 @@ export function playlistAddedEmbed(config, playlist) {
 /**
  * A standalone card that follows the now-playing message.
  *
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/youtube.js').Track[]} tracks
  */
 export function queueBoardEmbed(config, tracks) {
@@ -122,7 +122,7 @@ export function queueBoardEmbed(config, tracks) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/guild-player.js').GuildPlayer} player
  */
 export function nowPlayingEmbed(config, player) {
@@ -153,7 +153,7 @@ export function nowPlayingEmbed(config, player) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/guild-player.js').GuildPlayer} player
  * @param {number} page 1-based
  * @param {number} pageSize
@@ -201,7 +201,7 @@ export function queueEmbed(config, player, page, pageSize = 10) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/youtube.js').Track[]} tracks
  * @param {string} query
  */
@@ -219,7 +219,6 @@ export function searchEmbed(config, tracks, query) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
  * @param {Array<{ id: string, title: string, durationSec: number | null, channel: string | null }>} tracks
  */
 export function searchSelectOptions(tracks) {
@@ -234,8 +233,8 @@ export function searchSelectOptions(tracks) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
- * @param {Array<{ name: string, playedAt: number }>} history
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+ * @param {Array<import('../music/youtube.js').Track & { playedAt: number }>} history
  */
 export function historyEmbed(config, history) {
   if (history.length === 0) {
@@ -250,40 +249,59 @@ export function historyEmbed(config, history) {
   return baseEmbed(config, 'Play history').setDescription(truncate(lines.join('\n'), 4000));
 }
 
-/** @param {ReturnType<import('../config.js').loadConfig>} config */
-export function helpEmbed(config) {
+/**
+ * Command names grouped for `/help`. Unknown commands fall into "More", so the
+ * help text cannot drift when a command is added.
+ */
+/** @type {Array<[string, string[]]>} */
+const HELP_GROUPS = [
+  ['Playback', ['play', 'search', 'pause', 'resume', 'skip', 'stop', 'seek', 'volume', 'loop']],
+  ['Queue', ['queue', 'nowplaying', 'remove', 'move', 'jump', 'shuffle', 'clear']],
+  ['Other', ['history', 'disconnect', 'help', 'diagnose', 'status', 'cache']],
+];
+
+/**
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+ * @param {Array<{ data: { name: string, description: string } }>} [commands]
+ */
+export function helpEmbed(config, commands = []) {
+  const byName = new Map(commands.map((command) => [command.data.name, command.data.description]));
+  const used = new Set();
+  const sections = [];
+
+  for (const [label, names] of HELP_GROUPS) {
+    const lines = names
+      .filter((name) => byName.has(name))
+      .map((name) => {
+        used.add(name);
+        return `\`/${name}\` — ${byName.get(name)}`;
+      });
+    if (lines.length > 0) sections.push(`**${label}**\n${lines.join('\n')}`);
+  }
+
+  const extra = commands
+    .filter((command) => !used.has(command.data.name))
+    .map((command) => `\`/${command.data.name}\` — ${command.data.description}`);
+  if (extra.length > 0) sections.push(`**More**\n${extra.join('\n')}`);
+
   return baseEmbed(config, 'YouTube Music Bot')
     .setDescription(
-      [
-        'A self-hosted music bot that streams the best available audio from YouTube.',
-        '',
-        '**Playback**',
-        '`/play <query>` — search YouTube or add a video/playlist',
-        '`/search <query>` — browse results and choose a track',
-        '`/pause` · `/resume` · `/skip [count]` · `/stop`',
-        '`/seek <time>` · `/volume <0-200>` · `/loop <off|track|queue>`',
-        '',
-        '**Queue**',
-        '`/queue [page]` · `/nowplaying` · `/remove <position>`',
-        '`/move <from> <to>` · `/jump <position>` · `/shuffle` · `/clear`',
-        '',
-        '**Other**',
-        '`/history` · `/disconnect` · `/help`',
-        '`/diagnose` — admin tool check',
-        '',
-        'If a DJ role is configured, destructive controls require that role (or Manage Server).',
-      ].join('\n'),
+      truncate(
+        [
+          'A self-hosted music bot that streams the best available audio from YouTube.',
+          '',
+          ...sections,
+          '',
+          'If a DJ role is configured, destructive controls require that role (or Manage Server).',
+        ].join('\n'),
+        4000,
+      ),
     )
     .setFooter({ text: 'Tip: use a boosted voice channel and set its bitrate for the best quality.' });
 }
 
-/** @param {ReturnType<import('../config.js').loadConfig>} config */
-export function helpCommandLines() {
-  return helpEmbed(config);
-}
-
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {string} description
  */
 export function successEmbed(config, title, description) {
@@ -291,7 +309,7 @@ export function successEmbed(config, title, description) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {string} description
  */
 export function errorEmbed(config, description) {
@@ -303,18 +321,7 @@ export function errorEmbed(config, description) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
- * @param {string} description
- */
-export function warningEmbed(config, description) {
-  return new EmbedBuilder()
-    .setColor(0xfee75c)
-    .setTitle('Heads up')
-    .setDescription(truncate(description, 4000));
-}
-
-/**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {Array<{ name: string, ok: boolean, detail: string }>} checks
  */
 export function diagnosticsEmbed(config, checks) {

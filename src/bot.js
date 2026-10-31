@@ -1,5 +1,5 @@
 import { Client, Events, GatewayIntentBits, ActivityType, MessageFlags } from 'discord.js';
-import { commandMap } from './commands/index.js';
+import { commandMap, commands } from './commands/index.js';
 import { deployCommands } from './deploy.js';
 import { handleButton, handleSelect } from './interactions/handlers.js';
 import { assertAllowedChannel } from './util/checks.js';
@@ -9,8 +9,8 @@ import { INVITE_PERMISSIONS } from './config.js';
 
 /**
  * @param {{
- *   config: ReturnType<import('./config.js').loadConfig>,
- *   logger: ReturnType<import('./logger.js').createLogger>,
+ *   config: ReturnType<typeof import('./config.js').loadConfig>,
+ *   logger: ReturnType<typeof import('./logger.js').createLogger>,
  *   cache: import('./music/cache.js').MediaCache,
  *   youtube: import('./music/youtube.js').YouTube,
  *   manager: import('./music/manager.js').MusicManager,
@@ -22,7 +22,7 @@ export async function startBot(deps) {
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
   });
 
-  const ctx = { config, logger, cache, youtube, music: manager };
+  const ctx = { config, logger, cache, youtube, music: manager, commands };
 
   /** @type {Map<string, number>} */
   const cooldowns = new Map();
@@ -121,7 +121,7 @@ export async function startBot(deps) {
 /**
  * @param {import('discord.js').Interaction} interaction
  * @param {unknown} error
- * @param {{ config: ReturnType<import('./config.js').loadConfig>, logger: ReturnType<import('./logger.js').createLogger> }} ctx
+ * @param {{ config: ReturnType<typeof import('./config.js').loadConfig>, logger: ReturnType<typeof import('./logger.js').createLogger> }} ctx
  */
 async function handleInteractionError(interaction, error, ctx) {
   const isUserError = error instanceof UserError;

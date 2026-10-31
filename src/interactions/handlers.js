@@ -7,7 +7,7 @@ import { UserError } from '../util/errors.js';
 /**
  * @param {import('discord.js').ButtonInteraction} interaction
  * @param {{
- *   config: ReturnType<import('../config.js').loadConfig>,
+ *   config: ReturnType<typeof import('../config.js').loadConfig>,
  *   music: import('../music/manager.js').MusicManager,
  * }} ctx
  */
@@ -36,7 +36,8 @@ export async function handleButton(interaction, ctx) {
     const trackId = parts[3];
     if (interaction.guildId !== guildId) throw new UserError('This control is not for this server.');
     const player = ctx.music.require(guildId);
-    const memberChannel = interaction.member?.voice?.channel;
+    const member = interaction.member;
+    const memberChannel = member && 'voice' in member ? member.voice?.channel : null;
     if (!memberChannel || memberChannel.id !== player.voiceChannelId) {
       throw new UserError(`Join <#${player.voiceChannelId}> to use these controls.`);
     }
@@ -80,7 +81,7 @@ export async function handleButton(interaction, ctx) {
 /**
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  * @param {{
- *   config: ReturnType<import('../config.js').loadConfig>,
+ *   config: ReturnType<typeof import('../config.js').loadConfig>,
  *   music: import('../music/manager.js').MusicManager,
  * }} ctx
  * }}
