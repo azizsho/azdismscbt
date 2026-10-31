@@ -100,4 +100,27 @@ export function requireDJ(interaction, player) {
   }
 }
 
+/**
+ * The same DJ rule as `requireDJ`, for commands that can run before a player
+ * exists (for example `/autoplay`).
+ *
+ * @param {import('discord.js').ChatInputCommandInteraction} interaction
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+ */
+export function requireDJRole(interaction, config) {
+  if (config.djRoleIds.length === 0) return;
+  if (interaction.memberPermissions?.has?.(PermissionFlagsBits.ManageGuild)) return;
+
+  const roles = interaction.member?.roles;
+  let roleIds = [];
+  if (Array.isArray(roles)) {
+    roleIds = roles;
+  } else if (roles?.cache) {
+    roleIds = [...roles.cache.keys()];
+  }
+  if (config.djRoleIds.some((roleId) => roleIds.includes(roleId))) return;
+
+  throw new UserError('You need the DJ role (or Manage Server) to change autoplay.');
+}
+
 

@@ -38,6 +38,11 @@ export default {
       { name: 'Ping', value: `${Math.round(interaction.client.ws.ping)} ms`, inline: true },
       { name: 'Servers', value: String(interaction.client.guilds.cache.size), inline: true },
       { name: 'Active players', value: String(ctx.music.size), inline: true },
+      {
+        name: 'Autoplay',
+        value: ctx.music.getAutoplay(interaction.guildId ?? '') ? 'on' : 'off',
+        inline: true,
+      },
       { name: 'Memory', value: `${(process.memoryUsage().rss / 1024 / 1024).toFixed(0)} MiB`, inline: true },
       { name: 'Node', value: process.version, inline: true },
     ];

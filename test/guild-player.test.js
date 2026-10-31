@@ -26,7 +26,7 @@ const config = {
   autoplayAdd: 5,
 };
 
-function makePlayer() {
+function makePlayer(overrides = {}) {
   const guild = {
     id: 'guild-1',
     premiumTier: 0,
@@ -44,13 +44,24 @@ function makePlayer() {
     guild,
     voiceChannel,
     textChannel: { isTextBased: () => false },
-    config,
+    config: overrides.config ?? config,
     logger: createLogger('silent'),
     cache: {},
-    manager: { remove() {} },
+    manager: overrides.manager ?? { remove() {} },
   });
   return { player, guild };
 }
+
+test('autoplay follows the manager setting with a config fallback', () => {
+  const { player } = makePlayer({ manager: { remove() {}, getAutoplay: () => true } });
+  assert.equal(player.autoplay, true);
+
+  const { player: configOn } = makePlayer({ config: { ...config, autoplay: true } });
+  assert.equal(configOn.autoplay, true);
+
+  const { player: fallback } = makePlayer();
+  assert.equal(fallback.autoplay, false);
+});
 
 test('destroy is idempotent and concurrent calls share one promise', async () => {
   const { player } = makePlayer();

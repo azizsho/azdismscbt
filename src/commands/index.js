@@ -10,6 +10,7 @@ import remove from './remove.js';
 import clear from './clear.js';
 import shuffle from './shuffle.js';
 import loop from './loop.js';
+import autoplay from './autoplay.js';
 import seek from './seek.js';
 import volume from './volume.js';
 import disconnect from './disconnect.js';
@@ -34,6 +35,7 @@ export const commands = [
   clear,
   shuffle,
   loop,
+  autoplay,
   seek,
   volume,
   disconnect,

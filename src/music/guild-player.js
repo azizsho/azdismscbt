@@ -127,6 +127,11 @@ export class GuildPlayer {
     return this.player.state.status === AudioPlayerStatus.Playing;
   }
 
+  get autoplay() {
+    const configured = this.manager?.getAutoplay?.(this.guild.id);
+    return typeof configured === 'boolean' ? configured : this.config.autoplay;
+  }
+
   get positionMs() {
     if (!this.current) return 0;
     const state = this.player.state;
@@ -701,7 +706,7 @@ export class GuildPlayer {
 
     if (this.queue.length > 0) {
       void this.playNext().catch((error) => this.logger.error('Failed to advance queue', error));
-    } else if (this.config.autoplay && this.loopMode === 'off') {
+    } else if (this.autoplay && this.loopMode === 'off') {
       void this.#autoplay(finished);
     } else {
       void this.#removeNowPlaying();
@@ -1031,9 +1036,52 @@ export class GuildPlayer {
     return error?.code === 10008 || error?.status === 404 || error?.statusCode === 404;
   }
 
+  /**
+   * Adopt a manually requested `/nowplaying` reply as the live card. The
+   * previous card (and its queue card) is removed, this message takes over the
+   * progress refresh, and the next track cleans it up like an automatic card.
+   *
+   * @param {import('discord.js').Message} message
+   * @param {string} trackId
+   * @returns {Promise<boolean>} false when the track changed or the player closed
+   */
+  async adoptNowPlayingMessage(message, trackId) {
+    if (this.destroyed || !message) return false;
+
+    if (!this.current || this.current.id !== trackId) {
+      await message.delete().catch(() => {});
+      return false;
+    }
+
+    if (this.nowPlayingMessage?.id === message.id) {
+      this.#startNowPlayingTimer();
+      return true;
+    }
+
+    await this.#removeNowPlaying();
+
+    if (this.destroyed || !this.current || this.current.id !== trackId) {
+      await message.delete().catch(() => {});
+      return false;
+    }
+
+    // Invalidate sends and edits that were still using the previous card.
+    this.nowPlayingGeneration++;
+    this.nowPlayingMessage = message;
+    this.#startNowPlayingTimer();
+    await this.#updateQueueBoard();
+    return true;
+  }
+
   async #sendNowPlaying() {
-    if (!this.config.nowPlayingMessages) return;
     if (!this.current || !this.textChannel?.isTextBased()) return;
+
+    if (!this.config.nowPlayingMessages) {
+      // A manually requested card must not outlive its track just because
+      // automatic cards are disabled.
+      if (this.nowPlayingMessage) await this.#removeNowPlaying();
+      return;
+    }
 
     const track = this.current;
     const generation = ++this.nowPlayingGeneration;

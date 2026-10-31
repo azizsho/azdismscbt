@@ -30,3 +30,12 @@ test('now-playing card exposes previous, replay, loop, and queue controls', () =
     'np:queue:123456789012345678:dQw4w9WgXcQ',
   ]);
 });
+
+test('now-playing buttons only use Discord-valid emoji', () => {
+  const rows = nowPlayingButtons('123456789012345678', false, 'dQw4w9WgXcQ').map((row) => row.toJSON());
+
+  assert.deepEqual(
+    rows[1].components.map((component) => component.emoji.name),
+    ['⏮️', '🔄', '🔁', '📋'],
+  );
+});

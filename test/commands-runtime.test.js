@@ -5,6 +5,8 @@ import play from '../src/commands/play.js';
 import search from '../src/commands/search.js';
 import skip from '../src/commands/skip.js';
 import volume from '../src/commands/volume.js';
+import autoplay from '../src/commands/autoplay.js';
+import nowplaying from '../src/commands/nowplaying.js';
 import { loadConfig } from '../src/config.js';
 
 const config = loadConfig(
@@ -116,6 +118,7 @@ function makeInteraction({ options = {}, member, voice = true } = {}) {
     async reply(payload) {
       this.replied = true;
       replies.push({ ...payload, ephemeralReply: true });
+      return this.replyMessage;
     },
     replies,
     voiceChannel,
@@ -209,4 +212,61 @@ test('/volume clamps through the player and reports the new value', async () => 
   await volume.execute(interaction, ctx);
   assert.equal(player.volume, 150);
   assert.equal(interaction.replies.length, 1);
+});
+
+test('/autoplay toggles the server setting', async () => {
+  const interaction = makeInteraction();
+  const state = { enabled: false };
+  const ctx = {
+    config,
+    music: {
+      getAutoplay: () => state.enabled,
+      setAutoplay: (guildId, enabled) => {
+        state.enabled = enabled;
+        state.guildId = guildId;
+      },
+    },
+  };
+
+  await autoplay.execute(interaction, ctx);
+  assert.equal(state.enabled, true);
+  assert.equal(state.guildId, interaction.guildId);
+  assert.match(interaction.replies[0].embeds[0].data.description, /now \*\*on\*\*/);
+});
+
+test('/autoplay accepts an explicit value', async () => {
+  const interaction = makeInteraction({ options: { enabled: false } });
+  const state = { enabled: true };
+  const ctx = {
+    config,
+    music: {
+      getAutoplay: () => state.enabled,
+      setAutoplay: (_guildId, enabled) => {
+        state.enabled = enabled;
+      },
+    },
+  };
+
+  await autoplay.execute(interaction, ctx);
+  assert.equal(state.enabled, false);
+  assert.match(interaction.replies[0].embeds[0].data.description, /now \*\*off\*\*/);
+});
+
+test('/nowplaying adopts its reply as the live card', async () => {
+  const interaction = makeInteraction();
+  interaction.replyMessage = { id: 'manual-card' };
+  const player = fakePlayer({
+    current: makeTrack(),
+    async adoptNowPlayingMessage(message, trackId) {
+      this.adopted = { message, trackId };
+      return true;
+    },
+  });
+  const ctx = { config, music: { get: () => player } };
+
+  await nowplaying.execute(interaction, ctx);
+
+  assert.equal(player.adopted.message, interaction.replyMessage);
+  assert.equal(player.adopted.trackId, 'dQw4w9WgXcQ');
+  assert.equal(interaction.replies[0].embeds[0].data.title, 'Test Song');
 });

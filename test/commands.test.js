@@ -17,6 +17,7 @@ test('all command names are unique and valid', () => {
   assert.ok(names.includes('queue'));
   assert.ok(names.includes('status'));
   assert.ok(names.includes('cache'));
+  assert.ok(names.includes('autoplay'));
 });
 
 test('every command has a description and execute function', () => {
