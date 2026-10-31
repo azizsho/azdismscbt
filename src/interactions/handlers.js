@@ -2,6 +2,11 @@ import { MessageFlags } from 'discord.js';
 import { queueEmbed, nowPlayingEmbed, addedEmbed } from '../ui/embeds.js';
 import { nowPlayingButtons, queueButtons } from '../ui/components.js';
 import { ensurePlayable, requesterFrom } from '../commands/helpers.js';
+import {
+  deleteSearchSession,
+  getSearchSession,
+  takeSearchSession,
+} from '../services/search-store.js';
 import { UserError } from '../util/errors.js';
 
 /**
@@ -14,6 +19,16 @@ import { UserError } from '../util/errors.js';
 export async function handleButton(interaction, ctx) {
   const parts = interaction.customId.split(':');
   const [kind] = parts;
+
+  if (kind === 'search' && parts[1] === 'cancel' && parts[2]) {
+    const owner = { guildId: interaction.guildId ?? '', userId: interaction.user.id };
+    if (!getSearchSession(parts[2], owner)) {
+      throw new UserError('This search menu has expired. Run `/search` again.');
+    }
+    deleteSearchSession(parts[2]);
+    await interaction.update({ content: 'Search cancelled.', embeds: [], components: [] });
+    return;
+  }
 
   if (kind === 'queue' && parts[1] === 'page') {
     const page = Number(parts[2]);
@@ -92,11 +107,8 @@ export async function handleSelect(interaction, ctx) {
     throw new UserError('This search menu has expired. Run `/search` again.');
   }
 
-  const { takeSearchSession } = await import('../services/search-store.js');
-  const session = takeSearchSession(token, {
-    guildId: interaction.guildId,
-    userId: interaction.user.id,
-  });
+  const owner = { guildId: interaction.guildId ?? '', userId: interaction.user.id };
+  const session = getSearchSession(token, owner);
   if (!session) {
     throw new UserError('This search menu has expired or belongs to someone else. Run `/search` again.');
   }
@@ -112,6 +124,7 @@ export async function handleSelect(interaction, ctx) {
   ensurePlayable(track, ctx.config);
   track.requester = requesterFrom(interaction);
   const position = player.enqueue(track);
+  takeSearchSession(token, owner);
 
   await interaction.editReply({
     embeds: [addedEmbed(ctx.config, track, { position, queue: player.queue.toArray() })],

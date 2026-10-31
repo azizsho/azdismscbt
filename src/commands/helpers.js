@@ -1,3 +1,4 @@
+import { PermissionFlagsBits } from 'discord.js';
 import { UserError } from '../util/errors.js';
 import { requireVoice } from '../util/checks.js';
 
@@ -57,10 +58,20 @@ export async function setLoading(interaction, text) {
 export async function getOrCreatePlayer(interaction, ctx) {
   const voiceChannel = requireVoice(interaction);
   if (!interaction.guild) throw new UserError('This command only works in a server.');
-  if (!interaction.channel?.isTextBased()) {
+  const channel = interaction.channel;
+  if (!channel?.isTextBased()) {
     throw new UserError('Use this command in a text channel.');
   }
-  const player = await ctx.music.getOrCreate(interaction.guild, voiceChannel, interaction.channel);
-  player.setTextChannel(interaction.channel);
+  const me = interaction.guild.members.me;
+  const permissions = 'permissionsFor' in channel && me ? channel.permissionsFor(me) : null;
+  if (
+    !permissions?.has(PermissionFlagsBits.SendMessages) ||
+    !permissions.has(PermissionFlagsBits.EmbedLinks)
+  ) {
+    throw new UserError('I need **Send Messages** and **Embed Links** in this channel.');
+  }
+  const textChannel = /** @type {import('discord.js').GuildTextBasedChannel} */ (channel);
+  const player = await ctx.music.getOrCreate(interaction.guild, voiceChannel, textChannel);
+  player.setTextChannel(textChannel);
   return player;
 }

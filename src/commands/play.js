@@ -80,14 +80,16 @@ export default {
         for (const track of tracks) player.enqueue(track);
       }
 
-      const skipped = result.skipped + (result.tracks.length - tracks.length);
       await interaction.editReply({
         content: null,
         embeds: [
           playlistAddedEmbed(ctx.config, {
             title: result.title,
             count: tracks.length,
-            skipped,
+            skippedUnavailable: result.skipped,
+            skippedCapacity: Math.max(0, result.tracks.length - tracks.length),
+            total: result.total,
+            truncated: result.truncated,
             queue: player.queue.toArray(),
           }),
         ],

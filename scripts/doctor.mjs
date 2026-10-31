@@ -35,7 +35,7 @@ const cache = new MediaCache({
   youtube: { download: async () => { throw new Error('diagnostics only'); } },
   logger: createLogger('silent', 'doctor-cache'),
 });
-await cache.init();
+await cache.init({ prune: false });
 
 const checks = await runDiagnostics(config, cache, logger);
 

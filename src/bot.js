@@ -112,7 +112,11 @@ export async function startBot(deps) {
   client.on(Events.Error, (error) => logger.error('Discord client error', error));
   client.on(Events.Warn, (message) => logger.debug(`Discord warning: ${message}`));
   client.on(Events.GuildCreate, (guild) => logger.info(`Joined server: ${guild.name} (${guild.id})`));
-  client.on(Events.GuildDelete, (guild) => logger.info(`Left server: ${guild.name ?? guild.id} (${guild.id})`));
+  client.on(Events.GuildDelete, async (guild) => {
+    const player = manager.get(guild.id);
+    if (player) await player.destroy({ silent: true });
+    logger.info(`Left server: ${guild.name ?? guild.id} (${guild.id})`);
+  });
 
   await client.login(config.token);
   return { client, manager, cache };

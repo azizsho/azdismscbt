@@ -31,7 +31,7 @@ export default {
 
     const result = player.skip(count);
     const title = result.skipped?.title ?? 'the current download';
-    const extra = count > 1 ? ` and ${count - 1} upcoming track(s)` : '';
+    const extra = result.removedUpcoming > 0 ? ` and ${result.removedUpcoming} upcoming track(s)` : '';
     await interaction.reply({
       embeds: [successEmbed(ctx.config, 'Skipped', `Skipped **${title}**${extra}.`)],
     });

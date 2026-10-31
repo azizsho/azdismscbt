@@ -12,7 +12,7 @@ const baseEnv = {
 
 test('loadConfig applies defaults', () => {
   const config = loadConfig({ ...baseEnv }, { checkTools: false });
-  assert.equal(config.defaultVolume, 80);
+  assert.equal(config.defaultVolume, 100);
   assert.equal(config.maxQueueSize, 100);
   assert.equal(config.maxTrackSeconds, 7200);
   assert.equal(config.maxBitrateKbps, 256);
@@ -57,4 +57,15 @@ test('loadConfig rejects invalid values', () => {
   assert.throws(() => loadConfig({ ...baseEnv, DISCORD_CLIENT_ID: 'nope' }, { checkTools: false }), /DISCORD_CLIENT_ID/);
   assert.throws(() => loadConfig({ ...baseEnv, DEFAULT_VOLUME: '900' }, { checkTools: false }), /DEFAULT_VOLUME/);
   assert.throws(() => loadConfig({ ...baseEnv, DISCORD_GUILD_ID: 'bad' }, { checkTools: false }), /DISCORD_GUILD_ID/);
+});
+
+test('loadConfig validates PRELOAD_AHEAD and boolean typos', () => {
+  assert.throws(
+    () => loadConfig({ ...baseEnv, PRELOAD_AHEAD: '99' }, { checkTools: false }),
+    /PRELOAD_AHEAD/,
+  );
+  assert.throws(
+    () => loadConfig({ ...baseEnv, AUTO_DEPLOY_COMMANDS: 'maybe' }, { checkTools: false }),
+    /AUTO_DEPLOY_COMMANDS/,
+  );
 });

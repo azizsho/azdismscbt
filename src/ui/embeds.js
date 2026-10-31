@@ -86,12 +86,32 @@ export function addedEmbed(config, track, options = {}) {
 
 /**
  * @param {ReturnType<typeof import('../config.js').loadConfig>} config
- * @param {{ title: string, count: number, skipped?: number, queue?: import('../music/youtube.js').Track[] }} playlist
+ * @param {{
+ *   title: string,
+ *   count: number,
+ *   skipped?: number,
+ *   skippedUnavailable?: number,
+ *   skippedCapacity?: number,
+ *   total?: number,
+ *   truncated?: boolean,
+ *   queue?: import('../music/youtube.js').Track[],
+ * }} playlist
  */
 export function playlistAddedEmbed(config, playlist) {
-  const skippedText = playlist.skipped ? ` Skipped ${playlist.skipped} unavailable/too-long track(s).` : '';
+  const notes = [];
+  if (playlist.truncated && playlist.total) {
+    notes.push(`Showing the first **${playlist.count}** of **${playlist.total}** tracks.`);
+  }
+  const unavailable = playlist.skippedUnavailable ?? playlist.skipped ?? 0;
+  if (unavailable > 0) notes.push(`Skipped **${unavailable}** unplayable or too-long track(s).`);
+  if (playlist.skippedCapacity > 0) {
+    notes.push(`Skipped **${playlist.skippedCapacity}** because the queue was full.`);
+  }
+
   const embed = baseEmbed(config, 'Playlist added').setDescription(
-    `Queued **${playlist.count}** track(s) from **${escapeMarkdown(truncate(playlist.title, 100))}**.${skippedText}`,
+    `Queued **${playlist.count}** track(s) from **${escapeMarkdown(truncate(playlist.title, 100))}**.${
+      notes.length > 0 ? ` ${notes.join(' ')}` : ''
+    }`,
   );
   if (playlist.queue?.length) {
     embed.addFields({ name: 'Up next', value: previewValue(playlist.queue, QUEUE_PREVIEW_LIMIT) });

@@ -9,7 +9,7 @@ Built with:
 - **yt-dlp** for YouTube search, metadata, and audio downloads
 - **ffmpeg** for demuxing/remuxing and Opus encoding
 
-> **Audio quality:** YouTube's best audio is usually Opus at ~128–160 kbps (higher with some Premium accounts). When the source is Opus, the bot remuxes it to Ogg and **passes the original packets through** instead of decoding and re-encoding, so there is no generation loss. For non-Opus sources it encodes with libopus at up to 256 kbps. Discord's channel bitrate still caps what listeners can receive; see [Audio quality](#audio-quality).
+> **Audio quality:** YouTube's best audio is usually Opus at ~128–160 kbps (higher with some Premium accounts). When the source is Opus, the bot remuxes it to Ogg and **passes the original packets through** instead of decoding and re-encoding, so there is no generation loss. For non-Opus sources it encodes with libopus at up to 256 kbps. Passthrough only applies while `DEFAULT_VOLUME=100` and normalization is off; any other volume forces a re-encode. Discord's channel bitrate still caps what listeners can receive; see [Audio quality](#audio-quality).
 
 ---
 
@@ -389,6 +389,7 @@ Notes:
 
 - YouTube’s normal best audio is ~128 kbps Opus. Paying for YouTube Premium does not guarantee a higher-bitrate stream for every video, but Premium cookies can expose better formats when available.
 - `AUDIO_NORMALIZE=true` enables single-pass loudness normalization. It is off by default because it forces re-encoding and can slightly colour the audio.
+- The Opus passthrough is skipped when `DEFAULT_VOLUME` (or `/volume`) is anything other than 100; ffmpeg then decodes and re-encodes. Leave volume at 100 and use Discord's own per-user volume slider if you want to turn it down without losing the passthrough.
 - Live streams are rejected. This bot is for VOD tracks and mixes.
 
 ---
@@ -404,7 +405,7 @@ All settings live in `.env`.
 | `DISCORD_GUILD_ID` | empty | Register commands in one server instantly. Empty = global. |
 | `DJ_ROLE_IDS` | empty | Comma-separated role IDs for destructive controls. Empty = everyone. |
 | `ALLOWED_TEXT_CHANNEL_IDS` | empty | Comma-separated channel IDs where commands are allowed. Empty = anywhere. |
-| `DEFAULT_VOLUME` | `80` | 0–200. |
+| `DEFAULT_VOLUME` | `100` | 0–200. Any value other than 100 forces re-encoding. |
 | `MAX_QUEUE_SIZE` | `100` | Upcoming tracks per server. |
 | `MAX_TRACK_MINUTES` | `120` | Reject longer videos/mixes. |
 | `MAX_PLAYLIST_ITEMS` | `50` | Tracks imported from one playlist URL. |

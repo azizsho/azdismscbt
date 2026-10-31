@@ -80,3 +80,18 @@ export function searchSelect(token, tracks) {
 
   return [new ActionRowBuilder().addComponents(menu)];
 }
+
+/**
+ * @param {string} token
+ * @returns {any[]}
+ */
+export function searchCancelButton(token) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`search:cancel:${token}`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}

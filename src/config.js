@@ -30,11 +30,12 @@ function readInt(env, name, fallback, { min = -Infinity, max = Infinity } = {}, 
   return value;
 }
 
-function readBool(env, name, fallback) {
+function readBool(env, name, fallback, errors = []) {
   const raw = readString(env, name).toLowerCase();
   if (!raw) return fallback;
   if (['1', 'true', 'yes', 'on'].includes(raw)) return true;
   if (['0', 'false', 'no', 'off'].includes(raw)) return false;
+  errors.push(`${name} must be true or false.`);
   return fallback;
 }
 
@@ -99,7 +100,7 @@ export function loadConfig(env = process.env, options = {}) {
     }
   }
 
-  const defaultVolume = readInt(env, 'DEFAULT_VOLUME', 80, { min: 0, max: 200 }, errors);
+  const defaultVolume = readInt(env, 'DEFAULT_VOLUME', 100, { min: 0, max: 200 }, errors);
   const maxQueueSize = readInt(env, 'MAX_QUEUE_SIZE', 100, { min: 1, max: 500 }, errors);
   const maxTrackMinutes = readInt(env, 'MAX_TRACK_MINUTES', 120, { min: 1, max: 600 }, errors);
   const maxPlaylistItems = readInt(env, 'MAX_PLAYLIST_ITEMS', 50, { min: 1, max: 200 }, errors);
@@ -162,6 +163,13 @@ export function loadConfig(env = process.env, options = {}) {
     errors.push('LOG_LEVEL must be one of: debug, info, warn, error, silent.');
   }
 
+  const preloadAhead = readInt(env, 'PRELOAD_AHEAD', 3, { min: 0, max: 10 }, errors);
+  const autoSetChannelBitrate = readBool(env, 'AUTO_SET_CHANNEL_BITRATE', true, errors);
+  const autoDeployCommands = readBool(env, 'AUTO_DEPLOY_COMMANDS', true, errors);
+  const nowPlayingMessages = readBool(env, 'NOW_PLAYING_MESSAGES', true, errors);
+  const audioNormalize = readBool(env, 'AUDIO_NORMALIZE', false, errors);
+  const restoreChannelBitrate = readBool(env, 'RESTORE_CHANNEL_BITRATE', true, errors);
+
   if (errors.length > 0) {
     const error = new Error(`Invalid configuration:\n- ${errors.join('\n- ')}`);
     error.name = 'ConfigError';
@@ -180,16 +188,16 @@ export function loadConfig(env = process.env, options = {}) {
     maxPlaylistItems,
     idleDisconnectSeconds,
     maxBitrateKbps,
-    autoSetChannelBitrate: readBool(env, 'AUTO_SET_CHANNEL_BITRATE', true),
-    preloadAhead: readInt(env, 'PRELOAD_AHEAD', 3, { min: 0, max: 10 }, errors),
+    autoSetChannelBitrate,
+    preloadAhead,
     preloadConcurrency,
     ytdlpConcurrency,
     commandCooldownSeconds,
     ytdlpMaxAgeDays,
-    autoDeployCommands: readBool(env, 'AUTO_DEPLOY_COMMANDS', true),
-    nowPlayingMessages: readBool(env, 'NOW_PLAYING_MESSAGES', true),
-    audioNormalize: readBool(env, 'AUDIO_NORMALIZE', false),
-    restoreChannelBitrate: readBool(env, 'RESTORE_CHANNEL_BITRATE', true),
+    autoDeployCommands,
+    nowPlayingMessages,
+    audioNormalize,
+    restoreChannelBitrate,
     joinSoundFile,
     leaveSoundFile,
     soundVolume,

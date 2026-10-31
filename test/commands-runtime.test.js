@@ -160,9 +160,12 @@ test('/search returns a select menu', async () => {
   assert.doesNotMatch(embed.data.description, /\]\(/);
   assert.match(embed.data.footer.text, /dropdown below/i);
   const components = reply.components;
-  assert.equal(components.length, 1);
+  assert.equal(components.length, 2);
   const row = components[0].toJSON();
   assert.equal(row.components[0].type, 3); // String select
+  const cancelRow = components[1].toJSON();
+  assert.equal(cancelRow.components[0].type, 2); // Button
+  assert.match(cancelRow.components[0].custom_id, /^search:cancel:/);
 });
 
 test('/skip skips immediately without a vote', async () => {
@@ -185,6 +188,10 @@ test('/skip lets anyone skip multiple tracks', async () => {
   const player = fakePlayer({
     current: makeTrack(),
     isDJ: () => false,
+    skip(count) {
+      this.lastSkip = count;
+      return { skipped: makeTrack(), removedUpcoming: 4 };
+    },
     queue: { length: 3, isEmpty: false, toArray: () => [makeTrack()] },
   });
   const ctx = { config, music: { get: () => player } };

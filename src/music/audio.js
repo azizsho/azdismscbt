@@ -3,7 +3,10 @@ import path from 'node:path';
 import { createAudioResource, StreamType } from '@discordjs/voice';
 import { UserError } from '../util/errors.js';
 
-const OPUS_EXTENSIONS = new Set(['.webm', '.opus', '.ogg']);
+// `.webm` is deliberately excluded: YouTube's fallback format can be Vorbis
+// inside WebM, and copying that into an Ogg/Opus stream does not play. A
+// successful codec probe is required before treating WebM as Opus.
+const OPUS_EXTENSIONS = new Set(['.opus', '.ogg']);
 const MAX_STDERR_BYTES = 16 * 1024;
 
 /**

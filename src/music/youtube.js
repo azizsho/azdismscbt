@@ -208,7 +208,7 @@ export class YouTube {
    * @param {{ playlist?: boolean }} [options]
    * @returns {Promise<
    *   | { kind: 'track', track: Track }
-   *   | { kind: 'playlist', title: string, tracks: Track[], skipped: number }
+   *   | { kind: 'playlist', title: string, tracks: Track[], skipped: number, total: number, truncated: boolean }
    * >}
    */
   async resolveUrl(input, options = {}) {
@@ -243,19 +243,20 @@ export class YouTube {
 
   /**
    * @param {string} input
-   * @returns {Promise<{ kind: 'playlist', title: string, tracks: Track[], skipped: number }>}
+   * @returns {Promise<{ kind: 'playlist', title: string, tracks: Track[], skipped: number, total: number, truncated: boolean }>}
    */
   async #resolvePlaylist(input) {
     const playlistId = extractPlaylistId(input);
     if (!playlistId) throw new UserError('Could not find a playlist ID in that URL.');
 
     const limit = this.config.maxPlaylistItems;
+    const fetchLimit = Math.min(200, limit + 25);
     const json = await this.#json([
       ...this.#baseArgs,
       '--flat-playlist',
       '--dump-single-json',
       '--playlist-end',
-      String(Math.min(200, limit + 25)),
+      String(fetchLimit),
       '--',
       `https://www.youtube.com/playlist?list=${playlistId}`,
     ]);
@@ -280,11 +281,14 @@ export class YouTube {
       });
     }
 
+    const total = numberOrNull(json.playlist_count) ?? entries.length;
     return {
       kind: 'playlist',
       title: typeof json.title === 'string' && json.title ? json.title : 'YouTube playlist',
       tracks,
       skipped: Math.max(0, skipped),
+      total,
+      truncated: total > tracks.length,
     };
   }
 

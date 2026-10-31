@@ -121,11 +121,41 @@ export async function runDiagnostics(config, cache, logger) {
     checks.push({ name: 'Data directory', ok: false, detail: error.message });
   }
 
-  checks.push({
-    name: 'YouTube cookies',
-    ok: true,
-    detail: config.cookiesFile ? 'configured' : 'not configured (optional)',
-  });
+  /** @type {{ name: string, ok: boolean, detail: string }} */
+  let cookieCheck = { name: 'YouTube cookies', ok: true, detail: 'not configured (optional)' };
+  if (config.cookiesFile) {
+    try {
+      await fs.access(config.cookiesFile, fs.constants.R_OK);
+      const text = await fs.readFile(config.cookiesFile, 'utf8');
+      let latestExpiry = 0;
+      for (const line of text.split(/\r?\n/)) {
+        if (!line || line.startsWith('#')) continue;
+        const fields = line.split('\t');
+        if (fields.length < 7) continue;
+        const expiry = Number(fields[4]);
+        if (Number.isFinite(expiry) && expiry > latestExpiry) latestExpiry = expiry;
+      }
+      if (latestExpiry === 0) {
+        cookieCheck = { name: 'YouTube cookies', ok: true, detail: 'configured (session cookies)' };
+      } else {
+        const when = new Date(latestExpiry * 1000).toISOString().slice(0, 10);
+        const daysLeft = Math.floor((latestExpiry * 1000 - Date.now()) / 86_400_000);
+        cookieCheck =
+          daysLeft < 0
+            ? { name: 'YouTube cookies', ok: false, detail: `expired on ${when}` }
+            : daysLeft <= 7
+              ? { name: 'YouTube cookies', ok: true, detail: `expires soon (${when})` }
+              : { name: 'YouTube cookies', ok: true, detail: `valid until ${when}` };
+      }
+    } catch (error) {
+      cookieCheck = {
+        name: 'YouTube cookies',
+        ok: false,
+        detail: `configured but unreadable: ${String(error.message ?? error).slice(0, 160)}`,
+      };
+    }
+  }
+  checks.push(cookieCheck);
 
   if (ytdlpVersion.code === 0) {
     const search = await runCommand(

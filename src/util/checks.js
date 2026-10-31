@@ -6,8 +6,14 @@ import { UserError, NoVoiceError } from '../util/errors.js';
  * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  */
 export function assertAllowedChannel(interaction, config) {
-  if (config.allowedTextChannelIds.length === 0) return;
-  if (!interaction.channelId || !config.allowedTextChannelIds.includes(interaction.channelId)) {
+  const allowed = config.allowedTextChannelIds;
+  if (allowed.length === 0) return;
+  const channel = interaction.channel;
+  const parentId = channel && 'parentId' in channel ? channel.parentId : null;
+  const isAllowed =
+    Boolean(interaction.channelId && allowed.includes(interaction.channelId)) ||
+    Boolean(parentId && allowed.includes(parentId));
+  if (!isAllowed) {
     throw new UserError('I am not allowed to be used in this channel.');
   }
 }

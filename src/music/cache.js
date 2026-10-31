@@ -34,7 +34,8 @@ export class MediaCache {
     this.prunePromise = null;
   }
 
-  async init() {
+  /** @param {{ prune?: boolean }} [options] */
+  async init({ prune = true } = {}) {
     await fs.mkdir(this.dir, { recursive: true });
     const files = await fs.readdir(this.dir).catch(() => []);
     for (const file of files) {
@@ -51,7 +52,7 @@ export class MediaCache {
       this.totalBytes += stat.size;
     }
     this.logger.info(`Cache ready: ${this.entries.size} track(s), ${(this.totalBytes / 1024 / 1024).toFixed(1)} MiB`);
-    await this.prune();
+    if (prune) await this.prune();
   }
 
   /**
