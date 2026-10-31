@@ -308,7 +308,7 @@ export function historyEmbed(config, history) {
  */
 /** @type {Array<[string, string[]]>} */
 const HELP_GROUPS = [
-  ['Playback', ['play', 'search', 'pause', 'resume', 'skip', 'stop', 'seek', 'volume', 'loop']],
+  ['Playback', ['play', 'search', 'pause', 'resume', 'skip', 'stop', 'seek', 'volume', 'loop', 'autoplay']],
   ['Queue', ['queue', 'nowplaying', 'remove', 'move', 'jump', 'shuffle', 'clear']],
   ['Other', ['history', 'disconnect', 'help', 'diagnose', 'status', 'cache']],
 ];

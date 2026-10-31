@@ -9,6 +9,7 @@ import { MediaCache } from './music/cache.js';
 import { MusicManager } from './music/manager.js';
 import { YouTube } from './music/youtube.js';
 import { BitrateRestoreStore } from './services/bitrate-restore.js';
+import { GuildSettingsStore } from './services/guild-settings.js';
 import { startBot } from './bot.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -80,7 +81,10 @@ await cache.init();
 const bitrateRestore = new BitrateRestoreStore(path.join(config.dataDir, 'bitrate-restore.json'));
 await bitrateRestore.load();
 
-manager = new MusicManager({ config, logger, cache, youtube, bitrateRestore });
+const guildSettings = new GuildSettingsStore(path.join(config.dataDir, 'guild-settings.json'));
+await guildSettings.load();
+
+manager = new MusicManager({ config, logger, cache, youtube, bitrateRestore, settings: guildSettings });
 
 let app;
 try {
@@ -104,6 +108,7 @@ async function shutdown(signal) {
     cache.abortAll();
     await manager?.destroyAll();
     await bitrateRestore.flush();
+    await guildSettings.flush();
     app?.client.destroy();
   } catch (error) {
     logger.warn('Shutdown error', error);

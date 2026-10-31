@@ -71,7 +71,7 @@ export function nowPlayingButtons(guildId, paused, trackId) {
       new ButtonBuilder()
         .setCustomId(`np:replay:${suffix}`)
         .setLabel('Replay')
-        .setEmoji('↺')
+        .setEmoji('🔄')
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`np:loop:${suffix}`)

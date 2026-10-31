@@ -2,6 +2,26 @@
 
 A self-hosted Discord music bot that plays **audio only** from YouTube. It uses slash commands for search, queueing, and playback control, and is designed to run unattended on a spare home PC.
 
+## Contents
+
+- [Features](#features)
+- [Quick start (Windows)](#quick-start-windows)
+- [What I need from you](#what-i-need-from-you)
+- [Discord application setup](#discord-application-setup)
+- [Installation — Windows (recommended for a home PC)](#installation--windows-recommended-for-a-home-pc)
+- [Installation — Linux](#installation--linux)
+- [Installation — Docker](#installation--docker)
+- [Managing the bot](#managing-the-bot)
+- [Commands](#commands)
+  - [DJ behavior](#dj-behavior)
+- [Audio quality](#audio-quality)
+- [Configuration reference](#configuration-reference)
+- [YouTube cookies](#youtube-cookies)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Security and housekeeping](#security-and-housekeeping)
+- [Known limitations](#known-limitations)
+
 Built with:
 
 - **discord.js v14** for slash commands and voice state
@@ -20,6 +40,7 @@ Built with:
 - Queue with pagination, remove, move, jump, shuffle, and clear
 - Pause, resume, skip, stop, seek, volume, loop (off/track/queue)
 - Now-playing embed with pause/skip/stop/previous/replay/loop/queue buttons and live progress refresh; re-posted for every new track
+- `/nowplaying` moves the live card to your request: the previous card is removed, progress keeps updating on the new one, and the next track cleans it up
 - Queue card below the now-playing embed showing the next 10 tracks with requester and “starts in” estimates; `/queue` shows the full list
 - `/search` results can be queued or dismissed with a Cancel button without losing the menu when a pick fails
 - Card titles are plain text (no clickable links); use the menu or buttons to act
@@ -29,7 +50,7 @@ Built with:
 - Optional short join/leave sound clips
 - Automatic voice reconnect after a brief network drop
 - Pauses while alone in the channel and leaves after a configurable timeout
-- Optional autoplay that appends related tracks when the queue empties
+- Optional autoplay that appends related tracks when the queue empties; toggle per server with `/autoplay`
 - Audio cache with 3-track-ahead preloading, so the next songs are already on disk
 - Auto-disconnect after an idle period
 - Fast admin `/status` and `/cache` commands
@@ -339,11 +360,12 @@ docker compose up -d
 | `/stop` | Stop, clear the queue, and leave voice |
 | `/pause` / `/resume` | Pause or resume |
 | `/queue [page]` | Paginated queue with buttons |
-| `/nowplaying` | Current track, progress, and controls |
+| `/nowplaying` | Current track and controls; moves the live card to your request |
 | `/remove <position>` | Remove an upcoming track |
 | `/clear` | Clear upcoming tracks |
 | `/shuffle` | Shuffle upcoming tracks |
 | `/loop <off\|track\|queue>` | Loop mode |
+| `/autoplay [enabled]` | Turn autoplay on/off for this server |
 | `/seek <timestamp>` | Jump to `90`, `1:30`, or `1:02:03` |
 | `/volume <0-200>` | Set volume (100 = source level) |
 | `/move <from> <to>` | Reorder the queue |
@@ -359,6 +381,7 @@ docker compose up -d
 
 - If `DJ_ROLE_IDS` is empty, **everyone is treated as a DJ**.
 - If one or more DJ roles are configured, members with those roles, or **Manage Server**, can use destructive controls such as `/stop`, `/volume`, `/seek`, `/shuffle`, and `/clear`.
+- `/autoplay` follows the same DJ rule. Its state is stored per server in `data/guild-settings.json`; `AUTOPLAY` in `.env` is only the default for servers that never ran the command.
 - `/skip` is deliberately unrestricted: anyone in the bot’s voice channel can skip one or many tracks.
 - `/pause` and `/resume` are available to anyone in the bot’s voice channel.
 
@@ -423,7 +446,7 @@ All settings live in `.env`.
 | `RESTORE_CHANNEL_BITRATE` | `true` | Restore the original bitrate when leaving, if unchanged. |
 | `PAUSE_WHEN_ALONE` | `true` | Pause while no humans are in the voice channel. |
 | `LEAVE_WHEN_ALONE_SECONDS` | `120` | Leave after this long alone. `0` disables. |
-| `AUTOPLAY` | `false` | Queue related tracks when the queue empties. |
+| `AUTOPLAY` | `false` | Default autoplay. `/autoplay` overrides it per server and is remembered across restarts. |
 | `AUTOPLAY_ADD` | `5` | Related tracks added per autoplay fetch (1–10). |
 | `YTDLP_CONCURRENCY` | `4` | Global cap on concurrent yt-dlp processes (1–16). |
 | `COMMAND_COOLDOWN_SECONDS` | `2` | Per-user cooldown for `/play` and `/search`. |

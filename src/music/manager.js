@@ -10,6 +10,7 @@ export class MusicManager {
    *   cache: import('./cache.js').MediaCache,
    *   youtube?: import('./youtube.js').YouTube,
    *   bitrateRestore?: import('../services/bitrate-restore.js').BitrateRestoreStore,
+   *   settings?: import('../services/guild-settings.js').GuildSettingsStore,
    * }} options
    */
   constructor(options) {
@@ -18,8 +19,43 @@ export class MusicManager {
     this.cache = options.cache;
     this.youtube = options.youtube ?? options.cache?.youtube ?? null;
     this.bitrateRestore = options.bitrateRestore ?? null;
+    this.settings = options.settings ?? null;
+    /** @type {Map<string, boolean>} */
+    this.autoplayOverrides = new Map();
     /** @type {Map<string, GuildPlayer>} */
     this.players = new Map();
+  }
+
+  /**
+   * The effective autoplay setting for a guild: its stored override, or the
+   * `AUTOPLAY` default from `.env`.
+   *
+   * @param {string} guildId
+   * @returns {boolean}
+   */
+  getAutoplay(guildId) {
+    const override = this.autoplayOverrides.get(guildId);
+    if (typeof override === 'boolean') return override;
+
+    const stored = this.settings?.get(guildId)?.autoplay;
+    if (typeof stored === 'boolean') return stored;
+
+    return this.config.autoplay;
+  }
+
+  /**
+   * Persist a guild's autoplay choice. The in-memory copy keeps working even
+   * when no settings store was supplied (for example in tests).
+   *
+   * @param {string} guildId
+   * @param {boolean} enabled
+   * @returns {boolean}
+   */
+  setAutoplay(guildId, enabled) {
+    const value = Boolean(enabled);
+    this.autoplayOverrides.set(guildId, value);
+    this.settings?.setAutoplay(guildId, value);
+    return value;
   }
 
   /**
