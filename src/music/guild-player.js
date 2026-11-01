@@ -608,7 +608,11 @@ export class GuildPlayer {
   async #resolveBitrate() {
     const tier = Number(this.guild.premiumTier) || 0;
     const tierMax = TIER_MAX_KBPS[tier] ?? TIER_MAX_KBPS[0];
-    const desired = Math.max(32, Math.min(tierMax, this.config.maxBitrateKbps));
+    // Defensive rounding to Discord's 8 kbps step (config already rounds).
+    const desired = Math.min(
+      tierMax,
+      Math.max(32, Math.round(this.config.maxBitrateKbps / 8) * 8),
+    );
     let current = Math.round((this.voiceChannel.bitrate ?? 64000) / 1000);
     const original = current;
 

@@ -12,6 +12,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ffmpegStatic from 'ffmpeg-static';
+import { buildChildEnv } from '../src/util/child-env.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FORCE = process.argv.includes('--force');
@@ -71,7 +72,7 @@ function run(command, args, options = {}) {
     let child;
     try {
       child = spawn(command, args, {
-        env: { ...process.env, ...options.env },
+        env: buildChildEnv(options.env),
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });

@@ -162,35 +162,58 @@ export class MediaCache {
   }
 
   /**
+   * Remove leftover yt-dlp partial files for one video. Downloads are written
+   * straight into the cache directory, so an aborted or failed attempt can
+   * leave `.part`/`.ytdl` files behind until the next process start.
+   *
+   * @param {string} videoId
+   */
+  async #removePartialsFor(videoId) {
+    const files = await fs.readdir(this.dir).catch(() => []);
+    await Promise.all(
+      files
+        .filter((file) => file.startsWith(`${videoId}.`) && PARTIAL_FILE_RE.test(file))
+        .map((file) => fs.rm(path.join(this.dir, file), { force: true }).catch(() => {})),
+    );
+  }
+
+  /**
    * @param {import('./youtube.js').Track} track
    * @param {AbortSignal} signal
    */
   async #download(track, signal) {
-    this.logger.debug(`Downloading ${track.id}: ${track.title}`);
-    await this.#ensureDiskSpace();
-    const filePath = await this.youtube.download(track, { signal });
-    const stat = await fs.stat(filePath);
-    if (!stat.isFile() || stat.size < 1024) {
-      throw new UserError('The downloaded audio file is empty. Try another video.', { code: 'DOWNLOAD_EMPTY' });
-    }
-
-    const current = this.entries.get(track.id);
-    if (current) {
-      this.totalBytes = Math.max(0, this.totalBytes - current.size);
-      if (current.path !== filePath) {
-        await fs.rm(current.path, { force: true }).catch(() => {});
+    try {
+      this.logger.debug(`Downloading ${track.id}: ${track.title}`);
+      await this.#ensureDiskSpace();
+      const filePath = await this.youtube.download(track, { signal });
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile() || stat.size < 1024) {
+        throw new UserError('The downloaded audio file is empty. Try another video.', {
+          code: 'DOWNLOAD_EMPTY',
+        });
       }
+
+      const current = this.entries.get(track.id);
+      if (current) {
+        this.totalBytes = Math.max(0, this.totalBytes - current.size);
+        if (current.path !== filePath) {
+          await fs.rm(current.path, { force: true }).catch(() => {});
+        }
+      }
+      this.entries.set(track.id, { path: filePath, size: stat.size, lastAccess: Date.now() });
+      this.totalBytes += stat.size;
+      this.#scheduleIndexSave();
+
+      // Pruning is best-effort and must never fail a playback.
+      this.prune().catch((error) => {
+        if (!isAbortError(error)) this.logger.warn('Cache prune failed', error);
+      });
+
+      return filePath;
+    } catch (error) {
+      await this.#removePartialsFor(track.id);
+      throw error;
     }
-    this.entries.set(track.id, { path: filePath, size: stat.size, lastAccess: Date.now() });
-    this.totalBytes += stat.size;
-    this.#scheduleIndexSave();
-
-    // Pruning is best-effort and must never fail a playback.
-    this.prune().catch((error) => {
-      if (!isAbortError(error)) this.logger.warn('Cache prune failed', error);
-    });
-
-    return filePath;
   }
 
   async #ensureDiskSpace() {

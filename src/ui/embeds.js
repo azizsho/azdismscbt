@@ -179,7 +179,7 @@ export function nowPlayingEmbed(config, player) {
 
   const positionMs = player.positionMs;
   const durationSec = track.durationSec;
-  const embed = baseEmbed(config, track.title)
+  const embed = baseEmbed(config, truncate(escapeMarkdown(track.title), 256))
     .setDescription(
       `${formatProgress(Math.floor(positionMs / 1000), durationSec)}\n` +
         `${escapeMarkdown(track.channel ?? 'Unknown channel')} • requested by ${escapeMarkdown(requesterName(track))}`,
@@ -266,7 +266,7 @@ export function searchEmbed(config, tracks, query) {
     );
   });
 
-  return baseEmbed(config, `Search results for “${truncate(query, 80)}”`)
+  return baseEmbed(config, `Search results for “${truncate(escapeMarkdown(query), 80)}”`)
     .setDescription(truncate(lines.join('\n') || 'No results.', 4000))
     .setFooter({ text: 'Pick a track from the dropdown below to add it to the queue.' });
 }
