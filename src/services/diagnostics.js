@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { buildChildEnv } from '../util/child-env.js';
 
 /**
  * Run a short-lived diagnostic command without a shell.
@@ -16,7 +17,7 @@ function runCommand(command, args, options = {}) {
     let child;
     try {
       child = spawn(command, args, {
-        env: { ...process.env, ...options.env },
+        env: buildChildEnv(options.env),
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });

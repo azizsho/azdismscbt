@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { UserError, isAbortError } from '../util/errors.js';
+import { buildChildEnv } from '../util/child-env.js';
 import {
   canonicalizeYouTubeUrl,
   extractPlaylistId,
@@ -549,14 +550,13 @@ export class YouTube {
     const { signal, timeoutMs = 60_000, label = 'yt-dlp' } = options;
 
     return new Promise((resolve, reject) => {
-      const env = {
-        ...process.env,
+      const env = buildChildEnv({
         TEMP: this.config.tempDir,
         TMP: this.config.tempDir,
         TMPDIR: this.config.tempDir,
         PYTHONIOENCODING: 'utf-8',
         NO_COLOR: '1',
-      };
+      });
 
       let child;
       try {
