@@ -271,6 +271,8 @@ You see the logs live and can stop it with `Ctrl+C`. Do not use this while the h
 Get-Content .\data\logs\bot.log -Tail 50 -Wait -Encoding UTF8
 ```
 
+Logs rotate at **20 MB** and keep two backups (`bot.log.1`, `bot.log.2`), so the log folder stays around **60 MB**. Docker logs are capped separately in `docker-compose.yml` (3 × 10 MB); on Linux, journald bounds them with `SystemMaxUse`.
+
 ### Headless vs. boot task
 
 - `npm run headless` survives closing the terminal, but **not a reboot**.
@@ -439,7 +441,7 @@ All settings live in `.env`.
 | `MAX_TRACK_MINUTES` | `120` | Reject longer videos/mixes. |
 | `MAX_PLAYLIST_ITEMS` | `50` | Tracks imported from one playlist URL. |
 | `IDLE_DISCONNECT_SECONDS` | `300` | Leave voice after queue is empty. `0` disables. |
-| `MAX_BITRATE_KBPS` | `256` | Encoder/channel target, capped by boost tier. |
+| `MAX_BITRATE_KBPS` | `256` | Encoder/channel target, capped by boost tier. Rounded to the nearest 8 kbps. |
 | `PRELOAD_AHEAD` | `3` | Keep this many upcoming tracks downloaded. `0` disables. |
 | `PRELOAD_CONCURRENCY` | `2` | Parallel background downloads (1–4). |
 | `AUTO_SET_CHANNEL_BITRATE` | `true` | Raise channel bitrate when permitted. |

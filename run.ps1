@@ -19,18 +19,32 @@ $runPidFile = Join-Path $Root 'data\run.pid'
 Set-Content -Path $runPidFile -Value $PID -Encoding ASCII
 
 $script:logLines = 0
+$script:logMaxBytes = 20MB
+# Keep the current log plus two backups: about 60 MB total.
+$script:logBackups = 2
+
+function Rotate-Log {
+    if (-not (Test-Path $log)) { return }
+    for ($i = $script:logBackups - 1; $i -ge 1; $i--) {
+        $older = "$log.$i"
+        if (Test-Path $older) {
+            Move-Item -Force $older "$log.$($i + 1)"
+        }
+    }
+    Move-Item -Force $log "$log.1"
+}
 
 # Rotate while the bot runs, not just at wrapper startup.
 function Write-BotLine([string]$line) {
     Add-Content -Path $log -Value $line -Encoding UTF8
     $script:logLines++
-    if ($script:logLines % 500 -eq 0 -and (Test-Path $log) -and ((Get-Item $log).Length -gt 20MB)) {
-        Move-Item -Force $log "$log.1"
+    if ($script:logLines % 500 -eq 0 -and (Test-Path $log) -and ((Get-Item $log).Length -gt $script:logMaxBytes)) {
+        Rotate-Log
     }
 }
 
-if ((Test-Path $log) -and ((Get-Item $log).Length -gt 20MB)) {
-    Move-Item -Force $log "$log.1"
+if ((Test-Path $log) -and ((Get-Item $log).Length -gt $script:logMaxBytes)) {
+    Rotate-Log
 }
 
 try {

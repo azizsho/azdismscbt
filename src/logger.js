@@ -19,11 +19,11 @@ const DISCORD_TOKEN_RE = /[MN][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}/g;
 const SECRET_TEXT_RE = /\b(token|password|secret|cookie|authorization)\b\s*[:=]\s*\S+/gi;
 
 /** Mask secrets embedded in free-form strings (error messages, URLs). */
-function redactString(value) {
+function redactString(value, maxLength = 500) {
   const masked = String(value)
     .replace(DISCORD_TOKEN_RE, '[redacted-token]')
     .replace(SECRET_TEXT_RE, '$1=[redacted]');
-  return masked.length > 500 ? `${masked.slice(0, 500)}…` : masked;
+  return masked.length > maxLength ? `${masked.slice(0, maxLength)}…` : masked;
 }
 
 function redact(value, depth = 0) {
@@ -42,7 +42,8 @@ function redact(value, depth = 0) {
 function serializeMeta(meta) {
   if (meta === undefined) return '';
   if (meta instanceof Error) {
-    return `\n${redactString(meta.stack || meta.message)}`;
+    // Keep enough of the stack to debug, while regular messages stay short.
+    return `\n${redactString(meta.stack || meta.message, 8000)}`;
   }
   try {
     const clean = redact(meta);

@@ -156,3 +156,18 @@ test('history embed renders plain titles', () => {
   assert.match(embed.data.description, /Track 0 with/);
   assertNoCardLinks(embed);
 });
+
+test('now-playing and search titles escape markdown', () => {
+  const tricky = { ...track(0), title: '**bold** _x_ [link](https://example.com)' };
+  const player = { ...fakePlayer(1), current: tricky };
+
+  const np = nowPlayingEmbed(config, player);
+  assert.ok(np.data.title.includes('\\*\\*bold\\*\\*'));
+  assert.ok(np.data.title.includes('\\[link\\]'));
+  assert.equal(np.data.title.includes('[link]('), false);
+  assert.ok(np.data.title.length <= 256);
+
+  const search = searchEmbed(config, [tricky], '**q** [x](https://example.com)');
+  assert.ok(search.data.title.includes('\\*\\*q\\*\\*'));
+  assert.equal(search.data.title.includes('[x]('), false);
+});

@@ -159,6 +159,35 @@ test('one caller aborting does not cancel a shared download', async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
+test('failed downloads remove their partial files', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'music-cache-'));
+  const youtube = {
+    async download(track) {
+      await fs.writeFile(path.join(dir, `${track.id}.webm.part`), 'partial');
+      throw new Error('download exploded');
+    },
+  };
+  const cache = new MediaCache({
+    dir,
+    maxBytes: 1_000_000,
+    youtube,
+    logger: createLogger('silent'),
+  });
+  await cache.init({ prune: false });
+
+  await assert.rejects(() => cache.ensure(fakeTrack('ddddddddddd')), /exploded/);
+  assert.equal(
+    await fs
+      .access(path.join(dir, 'ddddddddddd.webm.part'))
+      .then(() => true)
+      .catch(() => false),
+    false,
+  );
+  assert.equal(cache.getStats().count, 0);
+
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
 test('init sweeps partial files and stale PyInstaller temp bundles', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'music-cache-'));
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'music-tmp-'));

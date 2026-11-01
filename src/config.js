@@ -105,7 +105,10 @@ export function loadConfig(env = process.env, options = {}) {
   const maxTrackMinutes = readInt(env, 'MAX_TRACK_MINUTES', 120, { min: 1, max: 600 }, errors);
   const maxPlaylistItems = readInt(env, 'MAX_PLAYLIST_ITEMS', 50, { min: 1, max: 200 }, errors);
   const idleDisconnectSeconds = readInt(env, 'IDLE_DISCONNECT_SECONDS', 300, { min: 0, max: 86400 }, errors);
-  const maxBitrateKbps = readInt(env, 'MAX_BITRATE_KBPS', 256, { min: 32, max: 512 }, errors);
+  // Discord voice bitrates are multiples of 8 kbps. Rounding here means the
+  // value we set can be read back exactly, so the leave-time restore matches.
+  const maxBitrateKbps =
+    Math.round(readInt(env, 'MAX_BITRATE_KBPS', 256, { min: 32, max: 512 }, errors) / 8) * 8;
   const preloadConcurrency = readInt(env, 'PRELOAD_CONCURRENCY', 2, { min: 1, max: 4 }, errors);
   const cacheMaxMb = readInt(env, 'AUDIO_CACHE_MAX_MB', 2048, { min: 64, max: 1024 * 1024 }, errors);
   const ytdlpConcurrency = readInt(env, 'YTDLP_CONCURRENCY', 4, { min: 1, max: 16 }, errors);

@@ -59,6 +59,12 @@ test('loadConfig rejects invalid values', () => {
   assert.throws(() => loadConfig({ ...baseEnv, DISCORD_GUILD_ID: 'bad' }, { checkTools: false }), /DISCORD_GUILD_ID/);
 });
 
+test('loadConfig rounds MAX_BITRATE_KBPS to Discord 8 kbps steps', () => {
+  const config = loadConfig({ ...baseEnv, MAX_BITRATE_KBPS: '100' }, { checkTools: false });
+  assert.equal(config.maxBitrateKbps, 104);
+  assert.equal(config.maxBitrateKbps % 8, 0);
+});
+
 test('loadConfig validates PRELOAD_AHEAD and boolean typos', () => {
   assert.throws(
     () => loadConfig({ ...baseEnv, PRELOAD_AHEAD: '99' }, { checkTools: false }),
