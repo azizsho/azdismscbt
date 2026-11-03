@@ -7,9 +7,14 @@ import {
 import { searchSelectOptions } from './embeds.js';
 
 /**
+ * Discord's builder generics are awkward to express through JSDoc, so these
+ * helpers deliberately return loose component arrays; the call sites only pass
+ * them straight to discord.js.
+ *
  * @param {number} page
  * @param {number} totalPages
  * @param {string} userId
+ * @returns {any[]}
  */
 export function queueButtons(page, totalPages, userId) {
   if (totalPages <= 1) return [];
@@ -35,6 +40,7 @@ export function queueButtons(page, totalPages, userId) {
  * @param {string} guildId
  * @param {boolean} paused
  * @param {string} trackId
+ * @returns {any[]}
  */
 export function nowPlayingButtons(guildId, paused, trackId) {
   const suffix = `${guildId}:${trackId}`;
@@ -56,12 +62,35 @@ export function nowPlayingButtons(guildId, paused, trackId) {
         .setEmoji('⏹️')
         .setStyle(ButtonStyle.Danger),
     ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`np:previous:${suffix}`)
+        .setLabel('Previous')
+        .setEmoji('⏮️')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`np:replay:${suffix}`)
+        .setLabel('Replay')
+        .setEmoji('🔄')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`np:loop:${suffix}`)
+        .setLabel('Loop')
+        .setEmoji('🔁')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`np:queue:${suffix}`)
+        .setLabel('Queue')
+        .setEmoji('📋')
+        .setStyle(ButtonStyle.Secondary),
+    ),
   ];
 }
 
 /**
  * @param {string} token
  * @param {import('../music/youtube.js').Track[]} tracks
+ * @returns {any[]}
  */
 export function searchSelect(token, tracks) {
   const menu = new StringSelectMenuBuilder()
@@ -72,4 +101,19 @@ export function searchSelect(token, tracks) {
     .addOptions(searchSelectOptions(tracks));
 
   return [new ActionRowBuilder().addComponents(menu)];
+}
+
+/**
+ * @param {string} token
+ * @returns {any[]}
+ */
+export function searchCancelButton(token) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`search:cancel:${token}`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    ),
+  ];
 }

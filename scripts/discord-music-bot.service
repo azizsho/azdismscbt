@@ -15,6 +15,8 @@ Environment=NODE_ENV=production
 # Environment=PATH=/usr/local/bin:/usr/bin:/bin
 NoNewPrivileges=true
 PrivateTmp=true
+# Logs go to journald. Bound them globally in /etc/systemd/journald.conf, e.g.
+#   SystemMaxUse=200M
 
 [Install]
 WantedBy=multi-user.target

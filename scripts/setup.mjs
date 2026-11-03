@@ -12,6 +12,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ffmpegStatic from 'ffmpeg-static';
+import { buildChildEnv } from '../src/util/child-env.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FORCE = process.argv.includes('--force');
@@ -71,7 +72,7 @@ function run(command, args, options = {}) {
     let child;
     try {
       child = spawn(command, args, {
-        env: { ...process.env, ...options.env },
+        env: buildChildEnv(options.env),
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -222,7 +223,7 @@ async function main() {
   if (createdEnv) log(`  ${step++}. Open .env and fill in your bot token and application ID.`);
   log(`  ${step++}. Run: npm run doctor`);
   log(`  ${step++}. Run: npm run deploy`);
-  log(`  ${step++}. Run: npm start`);
+  log(`  ${step}. Run: npm start`);
   log('');
   log('For a Windows boot task, run (in an elevated PowerShell):');
   log('  powershell -ExecutionPolicy Bypass -File scripts/install-windows-task.ps1');

@@ -2,18 +2,33 @@ import { MessageFlags } from 'discord.js';
 import { queueEmbed, nowPlayingEmbed, addedEmbed } from '../ui/embeds.js';
 import { nowPlayingButtons, queueButtons } from '../ui/components.js';
 import { ensurePlayable, requesterFrom } from '../commands/helpers.js';
+import {
+  deleteSearchSession,
+  getSearchSession,
+  takeSearchSession,
+} from '../services/search-store.js';
 import { UserError } from '../util/errors.js';
 
 /**
  * @param {import('discord.js').ButtonInteraction} interaction
  * @param {{
- *   config: ReturnType<import('../config.js').loadConfig>,
+ *   config: ReturnType<typeof import('../config.js').loadConfig>,
  *   music: import('../music/manager.js').MusicManager,
  * }} ctx
  */
 export async function handleButton(interaction, ctx) {
   const parts = interaction.customId.split(':');
   const [kind] = parts;
+
+  if (kind === 'search' && parts[1] === 'cancel' && parts[2]) {
+    const owner = { guildId: interaction.guildId ?? '', userId: interaction.user.id };
+    if (!getSearchSession(parts[2], owner)) {
+      throw new UserError('This search menu has expired. Run `/search` again.');
+    }
+    deleteSearchSession(parts[2]);
+    await interaction.update({ content: 'Search cancelled.', embeds: [], components: [] });
+    return;
+  }
 
   if (kind === 'queue' && parts[1] === 'page') {
     const page = Number(parts[2]);
@@ -36,7 +51,8 @@ export async function handleButton(interaction, ctx) {
     const trackId = parts[3];
     if (interaction.guildId !== guildId) throw new UserError('This control is not for this server.');
     const player = ctx.music.require(guildId);
-    const memberChannel = interaction.member?.voice?.channel;
+    const member = interaction.member;
+    const memberChannel = member && 'voice' in member ? member.voice?.channel : null;
     if (!memberChannel || memberChannel.id !== player.voiceChannelId) {
       throw new UserError(`Join <#${player.voiceChannelId}> to use these controls.`);
     }
@@ -44,6 +60,50 @@ export async function handleButton(interaction, ctx) {
       throw new UserError('That control belongs to a track that already finished. Use `/nowplaying`.');
     }
     const currentTrackId = player.current.id;
+
+    if (action === 'previous') {
+      const result = await player.previous();
+      await interaction.reply({
+        content: result.restarted
+          ? 'Restarted the current track.'
+          : `Replaying **${result.track?.title ?? 'the previous track'}**.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (action === 'replay') {
+      await player.seek(0);
+      await interaction.reply({
+        content: 'Replaying the current track from the start.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (action === 'loop') {
+      if (!player.isDJ(interaction.member, interaction.memberPermissions)) {
+        throw new UserError('You need the DJ role (or Manage Server) to change loop mode.');
+      }
+      const modes = ['off', 'track', 'queue'];
+      const nextMode = modes[(modes.indexOf(player.loopMode) + 1) % modes.length];
+      player.setLoop(nextMode);
+      await interaction.update({
+        embeds: [nowPlayingEmbed(ctx.config, player)],
+        components: nowPlayingButtons(guildId, player.isPaused, currentTrackId),
+      });
+      return;
+    }
+
+    if (action === 'queue') {
+      const rendered = queueEmbed(ctx.config, player, 1);
+      await interaction.reply({
+        embeds: [rendered.embed],
+        components: queueButtons(rendered.page, rendered.totalPages, interaction.user.id),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     if (action === 'toggle') {
       if (player.isPaused) player.resume();
@@ -80,7 +140,7 @@ export async function handleButton(interaction, ctx) {
 /**
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  * @param {{
- *   config: ReturnType<import('../config.js').loadConfig>,
+ *   config: ReturnType<typeof import('../config.js').loadConfig>,
  *   music: import('../music/manager.js').MusicManager,
  * }} ctx
  * }}
@@ -91,11 +151,8 @@ export async function handleSelect(interaction, ctx) {
     throw new UserError('This search menu has expired. Run `/search` again.');
   }
 
-  const { takeSearchSession } = await import('../services/search-store.js');
-  const session = takeSearchSession(token, {
-    guildId: interaction.guildId,
-    userId: interaction.user.id,
-  });
+  const owner = { guildId: interaction.guildId ?? '', userId: interaction.user.id };
+  const session = getSearchSession(token, owner);
   if (!session) {
     throw new UserError('This search menu has expired or belongs to someone else. Run `/search` again.');
   }
@@ -111,6 +168,7 @@ export async function handleSelect(interaction, ctx) {
   ensurePlayable(track, ctx.config);
   track.requester = requesterFrom(interaction);
   const position = player.enqueue(track);
+  takeSearchSession(token, owner);
 
   await interaction.editReply({
     embeds: [addedEmbed(ctx.config, track, { position, queue: player.queue.toArray() })],

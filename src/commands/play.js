@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { addedEmbed, playlistAddedEmbed } from '../ui/embeds.js';
 import { UserError } from '../util/errors.js';
+import { requireVoice } from '../util/checks.js';
 import { isYouTubeUrl, looksLikeUrl, normalizeYouTubeInput } from '../util/url.js';
 import { ensurePlayable, getOrCreatePlayer, requesterFrom, setLoading } from './helpers.js';
 
@@ -29,7 +30,7 @@ export default {
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
    * @param {{
-   *   config: ReturnType<import('../config.js').loadConfig>,
+   *   config: ReturnType<typeof import('../config.js').loadConfig>,
    *   music: import('../music/manager.js').MusicManager,
    *   youtube: import('../music/youtube.js').YouTube,
    * }} ctx
@@ -43,9 +44,11 @@ export default {
       throw new UserError('Only YouTube links are supported.');
     }
 
+    // Fail fast (without joining voice) when the user is not in a usable
+    // channel; the player is only created once there is something to enqueue.
+    requireVoice(interaction);
     await interaction.deferReply();
     await setLoading(interaction, isYouTubeUrl(query) ? 'Looking up video…' : 'Searching YouTube…');
-    const player = await getOrCreatePlayer(interaction, ctx);
     const requester = requesterFrom(interaction);
 
     if (isYouTubeUrl(query)) {
@@ -53,6 +56,7 @@ export default {
 
       if (result.kind === 'track') {
         ensurePlayable(result.track, ctx.config);
+        const player = await getOrCreatePlayer(interaction, ctx);
         result.track.requester = requester;
         const position = player.enqueue(result.track, { next });
         await interaction.editReply({
@@ -62,7 +66,11 @@ export default {
         return;
       }
 
+      // A playlist is resolved before joining so a bad/empty playlist cannot
+      // leave the bot connected with nothing queued. Joining here is safe even
+      // when the queue is full: that means a player is already connected.
       await setLoading(interaction, 'Loading playlist…');
+      const player = await getOrCreatePlayer(interaction, ctx);
       const space = ctx.config.maxQueueSize - player.queue.length;
       if (space <= 0) throw new UserError(`The queue is full (${ctx.config.maxQueueSize} tracks).`);
 
@@ -80,14 +88,16 @@ export default {
         for (const track of tracks) player.enqueue(track);
       }
 
-      const skipped = result.skipped + (result.tracks.length - tracks.length);
       await interaction.editReply({
         content: null,
         embeds: [
           playlistAddedEmbed(ctx.config, {
             title: result.title,
             count: tracks.length,
-            skipped,
+            skippedUnavailable: result.skipped,
+            skippedCapacity: Math.max(0, result.tracks.length - tracks.length),
+            total: result.total,
+            truncated: result.truncated,
             queue: player.queue.toArray(),
           }),
         ],
@@ -107,6 +117,8 @@ export default {
     }
 
     const track = playable[0];
+    ensurePlayable(track, ctx.config);
+    const player = await getOrCreatePlayer(interaction, ctx);
     track.requester = requester;
     const position = player.enqueue(track, { next });
     await interaction.editReply({

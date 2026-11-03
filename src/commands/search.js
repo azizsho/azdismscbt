@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { createSearchSession } from '../services/search-store.js';
 import { searchEmbed } from '../ui/embeds.js';
-import { searchSelect } from '../ui/components.js';
+import { searchCancelButton, searchSelect } from '../ui/components.js';
 import { UserError } from '../util/errors.js';
 import { isYouTubeUrl, looksLikeUrl, normalizeYouTubeInput } from '../util/url.js';
 import { requireVoice } from '../util/checks.js';
@@ -19,7 +19,7 @@ export default {
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
    * @param {{
-   *   config: ReturnType<import('../config.js').loadConfig>,
+   *   config: ReturnType<typeof import('../config.js').loadConfig>,
    *   youtube: import('../music/youtube.js').YouTube,
    *   music: import('../music/manager.js').MusicManager,
    * }} ctx
@@ -58,7 +58,7 @@ export default {
     await interaction.editReply({
       content: null,
       embeds: [searchEmbed(ctx.config, playable, query)],
-      components: searchSelect(token, playable),
+      components: [...searchSelect(token, playable), ...searchCancelButton(token)],
     });
   },
 };

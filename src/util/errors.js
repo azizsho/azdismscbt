@@ -19,13 +19,6 @@ export class QueueFullError extends UserError {
   }
 }
 
-export class NoPlayerError extends UserError {
-  constructor() {
-    super('Nothing is playing right now.', { code: 'NO_PLAYER' });
-    this.name = 'NoPlayerError';
-  }
-}
-
 export class NoVoiceError extends UserError {
   constructor(message = 'Join a voice channel first.') {
     super(message, { code: 'NO_VOICE' });

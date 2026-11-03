@@ -29,6 +29,31 @@ export function createSearchSession(data) {
 }
 
 /**
+ * Peek at a search session without consuming it. Returns null if it expired,
+ * belongs to another user, or belongs to another guild.
+ *
+ * @param {string} token
+ * @param {{ guildId: string, userId: string }} owner
+ */
+export function getSearchSession(token, owner) {
+  cleanup();
+  const session = sessions.get(token);
+  if (!session) return null;
+  if (session.guildId !== owner.guildId || session.userId !== owner.userId) return null;
+  return session;
+}
+
+/**
+ * Delete a search session (used by Cancel and after a successful enqueue).
+ *
+ * @param {string} token
+ */
+export function deleteSearchSession(token) {
+  cleanup();
+  return sessions.delete(token);
+}
+
+/**
  * Take (and invalidate) a search session. Returns null if it expired, belongs
  * to another user, or belongs to another guild.
  *
@@ -36,10 +61,7 @@ export function createSearchSession(data) {
  * @param {{ guildId: string, userId: string }} owner
  */
 export function takeSearchSession(token, owner) {
-  cleanup();
-  const session = sessions.get(token);
-  if (!session) return null;
-  if (session.guildId !== owner.guildId || session.userId !== owner.userId) return null;
-  sessions.delete(token);
+  const session = getSearchSession(token, owner);
+  if (session) sessions.delete(token);
   return session;
 }

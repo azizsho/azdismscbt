@@ -15,4 +15,26 @@ services:
       # YOUTUBE_COOKIES_FILE: /app/data/cookies.txt
     volumes:
       - ./data:/app/data
+    # Cap the container log so it cannot fill the disk (~30 MB total).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Voice is outbound UDP; no ports need to be published.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    pids_limit: 128
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const fs=require('fs');const pid=Number(fs.readFileSync('/app/data/bot.pid','utf8'));process.kill(pid,0)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s

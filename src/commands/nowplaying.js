@@ -11,13 +11,18 @@ export default {
 
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
-   * @param {{ config: ReturnType<import('../config.js').loadConfig>, music: import('../music/manager.js').MusicManager }} ctx
+   * @param {{ config: ReturnType<typeof import('../config.js').loadConfig>, music: import('../music/manager.js').MusicManager }} ctx
    */
   async execute(interaction, ctx) {
     const player = requirePlayer(interaction, ctx.music, { requireCurrent: true });
-    await interaction.reply({
+    const trackId = player.current.id;
+    const message = await interaction.reply({
       embeds: [nowPlayingEmbed(ctx.config, player)],
-      components: nowPlayingButtons(interaction.guildId, player.isPaused, player.current.id),
+      components: nowPlayingButtons(interaction.guildId, player.isPaused, trackId),
+      fetchReply: true,
     });
+    // Hand the reply to the player so the progress timer follows this card and
+    // the next track removes it instead of leaving a frozen duplicate behind.
+    await player.adoptNowPlayingMessage(message, trackId);
   },
 };

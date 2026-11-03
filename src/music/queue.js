@@ -49,11 +49,6 @@ export class TrackQueue {
     return track;
   }
 
-  /** @returns {import('./youtube.js').Track | undefined} */
-  peek() {
-    return this.tracks[0];
-  }
-
   /** @param {number} position 1-based */
   remove(position) {
     this.#assertPosition(position);

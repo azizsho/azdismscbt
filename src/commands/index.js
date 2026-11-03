@@ -10,6 +10,7 @@ import remove from './remove.js';
 import clear from './clear.js';
 import shuffle from './shuffle.js';
 import loop from './loop.js';
+import autoplay from './autoplay.js';
 import seek from './seek.js';
 import volume from './volume.js';
 import disconnect from './disconnect.js';
@@ -18,6 +19,8 @@ import jump from './jump.js';
 import history from './history.js';
 import help from './help.js';
 import diagnose from './diagnose.js';
+import status from './status.js';
+import cache from './cache.js';
 
 export const commands = [
   play,
@@ -32,6 +35,7 @@ export const commands = [
   clear,
   shuffle,
   loop,
+  autoplay,
   seek,
   volume,
   disconnect,
@@ -40,6 +44,8 @@ export const commands = [
   history,
   help,
   diagnose,
+  status,
+  cache,
 ];
 
 export const commandMap = new Map(commands.map((command) => [command.data.name, command]));

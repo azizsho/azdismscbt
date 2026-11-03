@@ -2,11 +2,11 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { UserError, isAbortError } from '../util/errors.js';
+import { buildChildEnv } from '../util/child-env.js';
 import {
   canonicalizeYouTubeUrl,
   extractPlaylistId,
   extractVideoId,
-  isPlaylistUrl,
   isYouTubeUrl,
   sanitizeQuery,
 } from '../util/url.js';
@@ -29,7 +29,9 @@ class Semaphore {
       this.active++;
       return;
     }
-    await new Promise((resolve) => this.waiting.push(resolve));
+    /** @type {Promise<void>} */
+    const slot = new Promise((resolve) => this.waiting.push(() => resolve()));
+    await slot;
     this.active++;
   }
 
@@ -138,8 +140,8 @@ function numberOrNull(value) {
 
 export class YouTube {
   /**
-   * @param {ReturnType<import('../config.js').loadConfig>} config
-   * @param {ReturnType<import('../logger.js').createLogger>} logger
+   * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+   * @param {ReturnType<typeof import('../logger.js').createLogger>} logger
    */
   constructor(config, logger) {
     this.config = config;
@@ -155,6 +157,7 @@ export class YouTube {
       '--no-update',
       '--no-warnings',
       '--no-progress',
+      '--no-mtime',
       '--socket-timeout',
       '20',
       '--retries',
@@ -207,7 +210,7 @@ export class YouTube {
    * @param {{ playlist?: boolean }} [options]
    * @returns {Promise<
    *   | { kind: 'track', track: Track }
-   *   | { kind: 'playlist', title: string, tracks: Track[], skipped: number }
+   *   | { kind: 'playlist', title: string, tracks: Track[], skipped: number, total: number, truncated: boolean }
    * >}
    */
   async resolveUrl(input, options = {}) {
@@ -242,19 +245,20 @@ export class YouTube {
 
   /**
    * @param {string} input
-   * @returns {Promise<{ kind: 'playlist', title: string, tracks: Track[], skipped: number }>}
+   * @returns {Promise<{ kind: 'playlist', title: string, tracks: Track[], skipped: number, total: number, truncated: boolean }>}
    */
   async #resolvePlaylist(input) {
     const playlistId = extractPlaylistId(input);
     if (!playlistId) throw new UserError('Could not find a playlist ID in that URL.');
 
     const limit = this.config.maxPlaylistItems;
+    const fetchLimit = Math.min(200, limit + 25);
     const json = await this.#json([
       ...this.#baseArgs,
       '--flat-playlist',
       '--dump-single-json',
       '--playlist-end',
-      String(Math.min(200, limit + 25)),
+      String(fetchLimit),
       '--',
       `https://www.youtube.com/playlist?list=${playlistId}`,
     ]);
@@ -279,12 +283,47 @@ export class YouTube {
       });
     }
 
+    const total = numberOrNull(json.playlist_count) ?? entries.length;
     return {
       kind: 'playlist',
       title: typeof json.title === 'string' && json.title ? json.title : 'YouTube playlist',
       tracks,
       skipped: Math.max(0, skipped),
+      total,
+      truncated: total > tracks.length,
     };
+  }
+
+  /**
+   * Fetch related tracks from the YouTube mix ("radio") for a video.
+   *
+   * @param {string} videoId
+   * @param {number} [limit]
+   * @returns {Promise<Track[]>}
+   */
+  async related(videoId, limit = 5) {
+    if (!VIDEO_ID_RE.test(videoId)) return [];
+    const count = Math.min(50, Math.max(1, limit));
+    const json = await this.#json([
+      ...this.#baseArgs,
+      '--flat-playlist',
+      '--dump-single-json',
+      '--playlist-end',
+      String(count + 5),
+      '--',
+      `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`,
+    ]);
+
+    const entries = Array.isArray(json.entries) ? json.entries : [];
+    const tracks = [];
+    for (const entry of entries) {
+      const track = this.#entryToTrack(entry);
+      if (!track || track.id === videoId || track.isLive) continue;
+      if (track.durationSec !== null && track.durationSec > this.config.maxTrackSeconds) continue;
+      tracks.push(track);
+      if (tracks.length >= count) break;
+    }
+    return tracks;
   }
 
   /**
@@ -315,9 +354,10 @@ export class YouTube {
       track.url,
     ];
 
-    const stdout = await this.#run(args, {
+    const timeoutMinutes = Math.max(10, this.config.ytdlpDownloadTimeoutMinutes ?? 30);
+    const stdout = await this.#runWithClientFallback(args, {
       signal: options.signal,
-      timeoutMs: 10 * 60 * 1000,
+      timeoutMs: timeoutMinutes * 60 * 1000,
       label: 'download',
     });
 
@@ -387,11 +427,10 @@ export class YouTube {
 
   /**
    * @param {string[]} args
-   * @param {{ signal?: AbortSignal, timeoutMs?: number, label?: string }} [options]
-   * @returns {Promise<string>}
+   * @returns {Promise<any>}
    */
   async #json(args) {
-    const stdout = await this.#run(args, { timeoutMs: 60_000, label: 'metadata' });
+    const stdout = await this.#runWithClientFallback(args, { timeoutMs: 60_000, label: 'metadata' });
     try {
       return JSON.parse(stdout);
     } catch (error) {
@@ -416,7 +455,7 @@ export class YouTube {
       return this.versionInfo;
     }
 
-    let version = null;
+    let version;
     try {
       const stdout = await this.#run(['--version'], { timeoutMs: 20_000, label: 'version' });
       version = stdout.trim().split(/\r?\n/)[0] ?? null;
@@ -456,6 +495,53 @@ export class YouTube {
   }
 
   /**
+   * Retry with a different YouTube player client when yt-dlp reports a 403 or
+   * an extraction failure. This is the cheapest recovery for YouTube changes.
+   *
+   * @param {string[]} args
+   * @param {{ signal?: AbortSignal, timeoutMs?: number, label?: string }} [options]
+   * @returns {Promise<string>}
+   */
+  async #runWithClientFallback(args, options = {}) {
+    try {
+      return await this.#run(args, options);
+    } catch (error) {
+      if (!(error instanceof UserError) || !['YOUTUBE_403', 'YTDLP_EXTRACT'].includes(error.code)) {
+        throw error;
+      }
+      let lastError = error;
+      for (const client of ['tv', 'web_embedded']) {
+        try {
+          this.logger.warn(`Retrying yt-dlp with player_client=${client}`);
+          return await this.#run(this.#withClient(args, client), options);
+        } catch (retryError) {
+          lastError = retryError;
+          if (!(retryError instanceof UserError) || !['YOUTUBE_403', 'YTDLP_EXTRACT'].includes(retryError.code)) {
+            throw retryError;
+          }
+        }
+      }
+      throw lastError;
+    }
+  }
+
+  /**
+   * Insert `--extractor-args` before the `--` terminator.
+   *
+   * @param {string[]} args
+   * @param {string} client
+   * @returns {string[]}
+   */
+  #withClient(args, client) {
+    const copy = [...args];
+    const index = copy.lastIndexOf('--');
+    const inject = ['--extractor-args', `youtube:player_client=${client}`];
+    if (index === -1) copy.push(...inject);
+    else copy.splice(index, 0, ...inject);
+    return copy;
+  }
+
+  /**
    * @param {string[]} args
    * @param {{ signal?: AbortSignal, timeoutMs?: number, label?: string }} [options]
    * @returns {Promise<string>}
@@ -464,14 +550,13 @@ export class YouTube {
     const { signal, timeoutMs = 60_000, label = 'yt-dlp' } = options;
 
     return new Promise((resolve, reject) => {
-      const env = {
-        ...process.env,
+      const env = buildChildEnv({
         TEMP: this.config.tempDir,
         TMP: this.config.tempDir,
         TMPDIR: this.config.tempDir,
         PYTHONIOENCODING: 'utf-8',
         NO_COLOR: '1',
-      };
+      });
 
       let child;
       try {

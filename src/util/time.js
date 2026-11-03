@@ -22,7 +22,7 @@ export function parseTimestamp(input) {
   const value = input.trim().toLowerCase().replace(/\s+/g, '');
   if (!value) throw new Error('Timestamp is empty.');
 
-  let seconds = 0;
+  let seconds;
 
   if (value.includes(':')) {
     const parts = value.split(':');
@@ -112,9 +112,4 @@ export function formatProgress(positionSeconds, durationSeconds, width = 18) {
   }
 
   return `\`${bar}\` ${formatDuration(positionSeconds)} / ${formatDuration(durationSeconds)}`;
-}
-
-/** Format a millisecond position as a timestamp. */
-export function formatMs(milliseconds) {
-  return formatDuration(Math.floor((milliseconds ?? 0) / 1000));
 }

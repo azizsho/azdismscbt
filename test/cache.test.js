@@ -113,6 +113,7 @@ test('concurrent prune calls share one pass and keep byte accounting exact', asy
   const stats = cache.getStats();
   let actualBytes = 0;
   for (const file of await fs.readdir(dir)) {
+    if (file === 'index.json') continue;
     actualBytes += (await fs.stat(path.join(dir, file))).size;
   }
   assert.equal(stats.totalBytes, actualBytes);
@@ -120,4 +121,93 @@ test('concurrent prune calls share one pass and keep byte accounting exact', asy
   assert.ok(stats.count >= 1);
 
   await fs.rm(dir, { recursive: true, force: true });
+});
+
+test('one caller aborting does not cancel a shared download', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'music-cache-'));
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const youtube = {
+    async download(track) {
+      await gate;
+      const file = path.join(dir, `${track.id}.webm`);
+      await fs.writeFile(file, Buffer.alloc(4096, 1));
+      return file;
+    },
+  };
+  const cache = new MediaCache({
+    dir,
+    maxBytes: 1_000_000,
+    youtube,
+    logger: createLogger('silent'),
+  });
+  await cache.init({ prune: false });
+
+  const controller = new AbortController();
+  const first = cache.ensure(fakeTrack('aaaaaaaaaaa'), { signal: controller.signal });
+  const second = cache.ensure(fakeTrack('aaaaaaaaaaa'));
+  controller.abort();
+
+  await assert.rejects(() => first, /Aborted/);
+  release();
+  const resolved = await second;
+  assert.ok(resolved.endsWith('aaaaaaaaaaa.webm'));
+  assert.equal(cache.has('aaaaaaaaaaa'), true);
+
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test('failed downloads remove their partial files', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'music-cache-'));
+  const youtube = {
+    async download(track) {
+      await fs.writeFile(path.join(dir, `${track.id}.webm.part`), 'partial');
+      throw new Error('download exploded');
+    },
+  };
+  const cache = new MediaCache({
+    dir,
+    maxBytes: 1_000_000,
+    youtube,
+    logger: createLogger('silent'),
+  });
+  await cache.init({ prune: false });
+
+  await assert.rejects(() => cache.ensure(fakeTrack('ddddddddddd')), /exploded/);
+  assert.equal(
+    await fs
+      .access(path.join(dir, 'ddddddddddd.webm.part'))
+      .then(() => true)
+      .catch(() => false),
+    false,
+  );
+  assert.equal(cache.getStats().count, 0);
+
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test('init sweeps partial files and stale PyInstaller temp bundles', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'music-cache-'));
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'music-tmp-'));
+  await fs.writeFile(path.join(dir, 'bbbbbbbbbbb.webm.part'), 'partial');
+  await fs.writeFile(path.join(dir, 'ccccccccccc.webm'), Buffer.alloc(4096, 1));
+  await fs.mkdir(path.join(tempDir, '_MEI12345'));
+
+  const cache = new MediaCache({
+    dir,
+    tempDir,
+    maxBytes: 1_000_000,
+    youtube: { download: async () => { throw new Error('not used'); } },
+    logger: createLogger('silent'),
+  });
+  await cache.init({ prune: false });
+
+  assert.equal(await fs.access(path.join(dir, 'bbbbbbbbbbb.webm.part')).then(() => true).catch(() => false), false);
+  assert.equal(await fs.access(path.join(tempDir, '_MEI12345')).then(() => true).catch(() => false), false);
+  assert.equal(cache.has('ccccccccccc'), true);
+
+  await fs.rm(dir, { recursive: true, force: true });
+  await fs.rm(tempDir, { recursive: true, force: true });
 });

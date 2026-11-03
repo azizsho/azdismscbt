@@ -40,6 +40,7 @@ function trackedMessage(deleteImpl) {
   return {
     calls,
     message: {
+      id: `msg-${Math.random()}`,
       async delete() {
         calls.deleted++;
         await deleteImpl?.();
@@ -50,6 +51,38 @@ function trackedMessage(deleteImpl) {
     },
   };
 }
+
+test('a manual now-playing card replaces the tracked card and starts refreshing', async () => {
+  const player = makePlayer();
+  player.current = { id: 'track-1', title: 'Track', durationSec: 60 };
+  const previous = trackedMessage();
+  const queueCard = trackedMessage();
+  player.nowPlayingMessage = previous.message;
+  player.queueMessage = queueCard.message;
+  const manual = trackedMessage();
+
+  const adopted = await player.adoptNowPlayingMessage(manual.message, 'track-1');
+
+  assert.equal(adopted, true);
+  assert.equal(previous.calls.deleted, 1);
+  assert.equal(queueCard.calls.deleted, 1);
+  assert.equal(player.nowPlayingMessage, manual.message);
+  assert.ok(player.nowPlayingTimer);
+
+  await player.destroy();
+});
+
+test('a manual now-playing card for a track that already changed is deleted', async () => {
+  const player = makePlayer();
+  player.current = { id: 'track-2', title: 'Next track', durationSec: 60 };
+  const manual = trackedMessage();
+
+  const adopted = await player.adoptNowPlayingMessage(manual.message, 'track-1');
+
+  assert.equal(adopted, false);
+  assert.equal(manual.calls.deleted, 1);
+  assert.equal(player.nowPlayingMessage, null);
+});
 
 test('destroy deletes the tracked now-playing message', async () => {
   const player = makePlayer();

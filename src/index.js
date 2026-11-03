@@ -8,6 +8,8 @@ import { createLogger } from './logger.js';
 import { MediaCache } from './music/cache.js';
 import { MusicManager } from './music/manager.js';
 import { YouTube } from './music/youtube.js';
+import { BitrateRestoreStore } from './services/bitrate-restore.js';
+import { GuildSettingsStore } from './services/guild-settings.js';
 import { startBot } from './bot.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -63,7 +65,7 @@ void youtube
       logger.info(`yt-dlp ${info.version} (${age})`);
     }
   })
-  .catch((error) => logger.debug('yt-dlp version check failed', error));
+  .catch((error) => logger.warn('yt-dlp version check failed; downloads may be affected', error));
 /** @type {MusicManager | null} */
 let manager = null;
 const cache = new MediaCache({
@@ -71,11 +73,18 @@ const cache = new MediaCache({
   maxBytes: config.cacheMaxBytes,
   youtube,
   logger,
+  tempDir: config.tempDir,
   isProtected: (id) => manager?.isTrackActive(id) ?? false,
 });
 await cache.init();
 
-manager = new MusicManager({ config, logger, cache });
+const bitrateRestore = new BitrateRestoreStore(path.join(config.dataDir, 'bitrate-restore.json'));
+await bitrateRestore.load();
+
+const guildSettings = new GuildSettingsStore(path.join(config.dataDir, 'guild-settings.json'));
+await guildSettings.load();
+
+manager = new MusicManager({ config, logger, cache, youtube, bitrateRestore, settings: guildSettings });
 
 let app;
 try {
@@ -96,7 +105,10 @@ async function shutdown(signal) {
   const force = setTimeout(() => process.exit(1), 10_000);
   force.unref();
   try {
+    cache.abortAll();
     await manager?.destroyAll();
+    await bitrateRestore.flush();
+    await guildSettings.flush();
     app?.client.destroy();
   } catch (error) {
     logger.warn('Shutdown error', error);
@@ -109,6 +121,21 @@ async function shutdown(signal) {
 
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
+// Cross-platform graceful stop used by the Windows scripts. A sentinel file is
+// simpler than an HTTP endpoint and lets Node run its normal shutdown path.
+const shutdownRequestFile = path.join(config.dataDir, 'shutdown.request');
+const shutdownWatcher = setInterval(() => {
+  if (!fsSync.existsSync(shutdownRequestFile)) return;
+  clearInterval(shutdownWatcher);
+  try {
+    fsSync.rmSync(shutdownRequestFile, { force: true });
+  } catch {
+    // Already gone.
+  }
+  void shutdown('control');
+}, 1000);
+shutdownWatcher.unref();
 
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled promise rejection', reason);

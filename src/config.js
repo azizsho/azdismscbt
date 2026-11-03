@@ -30,11 +30,12 @@ function readInt(env, name, fallback, { min = -Infinity, max = Infinity } = {}, 
   return value;
 }
 
-function readBool(env, name, fallback) {
+function readBool(env, name, fallback, errors = []) {
   const raw = readString(env, name).toLowerCase();
   if (!raw) return fallback;
   if (['1', 'true', 'yes', 'on'].includes(raw)) return true;
   if (['0', 'false', 'no', 'off'].includes(raw)) return false;
+  errors.push(`${name} must be true or false.`);
   return fallback;
 }
 
@@ -99,17 +100,27 @@ export function loadConfig(env = process.env, options = {}) {
     }
   }
 
-  const defaultVolume = readInt(env, 'DEFAULT_VOLUME', 80, { min: 0, max: 200 }, errors);
+  const defaultVolume = readInt(env, 'DEFAULT_VOLUME', 100, { min: 0, max: 200 }, errors);
   const maxQueueSize = readInt(env, 'MAX_QUEUE_SIZE', 100, { min: 1, max: 500 }, errors);
   const maxTrackMinutes = readInt(env, 'MAX_TRACK_MINUTES', 120, { min: 1, max: 600 }, errors);
   const maxPlaylistItems = readInt(env, 'MAX_PLAYLIST_ITEMS', 50, { min: 1, max: 200 }, errors);
   const idleDisconnectSeconds = readInt(env, 'IDLE_DISCONNECT_SECONDS', 300, { min: 0, max: 86400 }, errors);
-  const maxBitrateKbps = readInt(env, 'MAX_BITRATE_KBPS', 256, { min: 32, max: 512 }, errors);
+  // Discord voice bitrates are multiples of 8 kbps. Rounding here means the
+  // value we set can be read back exactly, so the leave-time restore matches.
+  const maxBitrateKbps =
+    Math.round(readInt(env, 'MAX_BITRATE_KBPS', 256, { min: 32, max: 512 }, errors) / 8) * 8;
   const preloadConcurrency = readInt(env, 'PRELOAD_CONCURRENCY', 2, { min: 1, max: 4 }, errors);
   const cacheMaxMb = readInt(env, 'AUDIO_CACHE_MAX_MB', 2048, { min: 64, max: 1024 * 1024 }, errors);
   const ytdlpConcurrency = readInt(env, 'YTDLP_CONCURRENCY', 4, { min: 1, max: 16 }, errors);
   const commandCooldownSeconds = readInt(env, 'COMMAND_COOLDOWN_SECONDS', 2, { min: 0, max: 60 }, errors);
   const ytdlpMaxAgeDays = readInt(env, 'YTDLP_MAX_AGE_DAYS', 45, { min: 0, max: 3650 }, errors);
+  const ytdlpDownloadTimeoutMinutes = readInt(
+    env,
+    'YTDLP_DOWNLOAD_TIMEOUT_MINUTES',
+    30,
+    { min: 10, max: 240 },
+    errors,
+  );
 
   const embedColorRaw = readString(env, 'EMBED_COLOR', '#5865F2');
   const colorMatch = embedColorRaw.match(HEX_COLOR_RE);
@@ -162,6 +173,23 @@ export function loadConfig(env = process.env, options = {}) {
     errors.push('LOG_LEVEL must be one of: debug, info, warn, error, silent.');
   }
 
+  const preloadAhead = readInt(env, 'PRELOAD_AHEAD', 3, { min: 0, max: 10 }, errors);
+  const autoSetChannelBitrate = readBool(env, 'AUTO_SET_CHANNEL_BITRATE', true, errors);
+  const autoDeployCommands = readBool(env, 'AUTO_DEPLOY_COMMANDS', true, errors);
+  const nowPlayingMessages = readBool(env, 'NOW_PLAYING_MESSAGES', true, errors);
+  const audioNormalize = readBool(env, 'AUDIO_NORMALIZE', false, errors);
+  const restoreChannelBitrate = readBool(env, 'RESTORE_CHANNEL_BITRATE', true, errors);
+  const pauseWhenAlone = readBool(env, 'PAUSE_WHEN_ALONE', true, errors);
+  const autoplay = readBool(env, 'AUTOPLAY', false, errors);
+  const leaveWhenAloneSeconds = readInt(
+    env,
+    'LEAVE_WHEN_ALONE_SECONDS',
+    120,
+    { min: 0, max: 86400 },
+    errors,
+  );
+  const autoplayAdd = readInt(env, 'AUTOPLAY_ADD', 5, { min: 1, max: 10 }, errors);
+
   if (errors.length > 0) {
     const error = new Error(`Invalid configuration:\n- ${errors.join('\n- ')}`);
     error.name = 'ConfigError';
@@ -180,16 +208,21 @@ export function loadConfig(env = process.env, options = {}) {
     maxPlaylistItems,
     idleDisconnectSeconds,
     maxBitrateKbps,
-    autoSetChannelBitrate: readBool(env, 'AUTO_SET_CHANNEL_BITRATE', true),
-    preloadAhead: readInt(env, 'PRELOAD_AHEAD', 3, { min: 0, max: 10 }, errors),
+    autoSetChannelBitrate,
+    preloadAhead,
     preloadConcurrency,
     ytdlpConcurrency,
     commandCooldownSeconds,
     ytdlpMaxAgeDays,
-    autoDeployCommands: readBool(env, 'AUTO_DEPLOY_COMMANDS', true),
-    nowPlayingMessages: readBool(env, 'NOW_PLAYING_MESSAGES', true),
-    audioNormalize: readBool(env, 'AUDIO_NORMALIZE', false),
-    restoreChannelBitrate: readBool(env, 'RESTORE_CHANNEL_BITRATE', true),
+    ytdlpDownloadTimeoutMinutes,
+    autoDeployCommands,
+    nowPlayingMessages,
+    audioNormalize,
+    restoreChannelBitrate,
+    pauseWhenAlone,
+    leaveWhenAloneSeconds,
+    autoplay,
+    autoplayAdd,
     joinSoundFile,
     leaveSoundFile,
     soundVolume,

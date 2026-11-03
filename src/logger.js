@@ -15,12 +15,20 @@ const SECRET_KEYS = new Set([
   'authorization',
 ]);
 
+const DISCORD_TOKEN_RE = /[MN][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}/g;
+const SECRET_TEXT_RE = /\b(token|password|secret|cookie|authorization)\b\s*[:=]\s*\S+/gi;
+
+/** Mask secrets embedded in free-form strings (error messages, URLs). */
+function redactString(value, maxLength = 500) {
+  const masked = String(value)
+    .replace(DISCORD_TOKEN_RE, '[redacted-token]')
+    .replace(SECRET_TEXT_RE, '$1=[redacted]');
+  return masked.length > maxLength ? `${masked.slice(0, maxLength)}…` : masked;
+}
+
 function redact(value, depth = 0) {
   if (depth > 4 || value === null || value === undefined) return value;
-  if (typeof value === 'string') {
-    if (value.length > 500) return `${value.slice(0, 500)}…`;
-    return value;
-  }
+  if (typeof value === 'string') return redactString(value);
   if (typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.slice(0, 20).map((item) => redact(item, depth + 1));
 
@@ -34,7 +42,8 @@ function redact(value, depth = 0) {
 function serializeMeta(meta) {
   if (meta === undefined) return '';
   if (meta instanceof Error) {
-    return `\n${meta.stack || meta.message}`;
+    // Keep enough of the stack to debug, while regular messages stay short.
+    return `\n${redactString(meta.stack || meta.message, 8000)}`;
   }
   try {
     const clean = redact(meta);
@@ -58,7 +67,8 @@ export function createLogger(level = 'info', scope = 'bot') {
   const write = (levelName, message, meta) => {
     if (LEVELS[levelName] < threshold) return;
     const timestamp = new Date().toISOString();
-    const line = `${timestamp} ${levelName.toUpperCase().padEnd(5)} [${scope}] ${message}${serializeMeta(meta)}`;
+    const safeMessage = redactString(message);
+    const line = `${timestamp} ${levelName.toUpperCase().padEnd(5)} [${scope}] ${safeMessage}${serializeMeta(meta)}`;
     if (levelName === 'error' || levelName === 'warn') {
       process.stderr.write(`${line}\n`);
     } else {

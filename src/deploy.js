@@ -9,8 +9,8 @@ import { commandPayloads } from './commands/index.js';
  * take up to an hour to appear. The payload hash is cached so restarts do not
  * re-register an unchanged command set.
  *
- * @param {ReturnType<import('./config.js').loadConfig>} config
- * @param {ReturnType<import('./logger.js').createLogger>} logger
+ * @param {ReturnType<typeof import('./config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('./logger.js').createLogger>} logger
  * @param {{ force?: boolean }} [options]
  */
 export async function deployCommands(config, logger, options = {}) {

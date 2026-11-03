@@ -2,6 +2,26 @@
 
 A self-hosted Discord music bot that plays **audio only** from YouTube. It uses slash commands for search, queueing, and playback control, and is designed to run unattended on a spare home PC.
 
+## Contents
+
+- [Features](#features)
+- [Quick start (Windows)](#quick-start-windows)
+- [What I need from you](#what-i-need-from-you)
+- [Discord application setup](#discord-application-setup)
+- [Installation — Windows (recommended for a home PC)](#installation--windows-recommended-for-a-home-pc)
+- [Installation — Linux](#installation--linux)
+- [Installation — Docker](#installation--docker)
+- [Managing the bot](#managing-the-bot)
+- [Commands](#commands)
+  - [DJ behavior](#dj-behavior)
+- [Audio quality](#audio-quality)
+- [Configuration reference](#configuration-reference)
+- [YouTube cookies](#youtube-cookies)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Security and housekeeping](#security-and-housekeeping)
+- [Known limitations](#known-limitations)
+
 Built with:
 
 - **discord.js v14** for slash commands and voice state
@@ -9,7 +29,7 @@ Built with:
 - **yt-dlp** for YouTube search, metadata, and audio downloads
 - **ffmpeg** for demuxing/remuxing and Opus encoding
 
-> **Audio quality:** YouTube's best audio is usually Opus at ~128–160 kbps (higher with some Premium accounts). When the source is Opus, the bot remuxes it to Ogg and **passes the original packets through** instead of decoding and re-encoding, so there is no generation loss. For non-Opus sources it encodes with libopus at up to 256 kbps. Discord's channel bitrate still caps what listeners can receive; see [Audio quality](#audio-quality).
+> **Audio quality:** YouTube's best audio is usually Opus at ~128–160 kbps (higher with some Premium accounts). When the source is Opus, the bot remuxes it to Ogg and **passes the original packets through** instead of decoding and re-encoding, so there is no generation loss. For non-Opus sources it encodes with libopus at up to 256 kbps. Passthrough only applies while `DEFAULT_VOLUME=100` and normalization is off; any other volume forces a re-encode. Discord's channel bitrate still caps what listeners can receive; see [Audio quality](#audio-quality).
 
 ---
 
@@ -19,16 +39,21 @@ Built with:
 - `/search` shows a numbered, plain-text result list and a select menu for queueing
 - Queue with pagination, remove, move, jump, shuffle, and clear
 - Pause, resume, skip, stop, seek, volume, loop (off/track/queue)
-- Now-playing embed with pause/skip/stop buttons and live progress refresh; re-posted for every new track
-- Queue card below the now-playing embed showing the next 10 tracks; `/queue` shows the full list
+- Now-playing embed with pause/skip/stop/previous/replay/loop/queue buttons and live progress refresh; re-posted for every new track
+- `/nowplaying` moves the live card to your request: the previous card is removed, progress keeps updating on the new one, and the next track cleans it up
+- Queue card below the now-playing embed showing the next 10 tracks with requester and “starts in” estimates; `/queue` shows the full list
+- `/search` results can be queued or dismissed with a Cancel button without losing the menu when a pick fails
 - Card titles are plain text (no clickable links); use the menu or buttons to act
 - `/play` replies include a snapshot of up to 10 upcoming tracks
 - Optional DJ role; anyone can skip
-- Automatic voice-channel bitrate boost and restore (if the bot has Manage Channels)
+- Automatic voice-channel bitrate boost and restore (if the bot has Manage Channels), including after a crash
 - Optional short join/leave sound clips
 - Automatic voice reconnect after a brief network drop
+- Pauses while alone in the channel and leaves after a configurable timeout
+- Optional autoplay that appends related tracks when the queue empties; toggle per server with `/autoplay`
 - Audio cache with 3-track-ahead preloading, so the next songs are already on disk
 - Auto-disconnect after an idle period
+- Fast admin `/status` and `/cache` commands
 - Works on Windows, Linux, and Docker
 - No YouTube API key required
 
@@ -181,13 +206,13 @@ Remove it with:
 powershell -ExecutionPolicy Bypass -File scripts/uninstall-windows-task.ps1
 ```
 
-> The task runs from whichever folder you installed the bot in. If the folder is inside OneDrive or another synced location, pause syncing or move it to a simple local path such as `D:\DiscordMusicBot` so SYSTEM can read it reliably.
+> The task runs from whichever folder you installed the bot in. If the folder is inside OneDrive or another synced location, pause syncing or move it to a simple local path such as `D:\<install-dir>` so SYSTEM can read it reliably.
 
 ---
 
 ## Managing the bot
 
-Run these from `D:\DiscordMusicBot`.
+Run these from your bot's install folder.
 
 ### Check whether it is running
 
@@ -201,8 +226,8 @@ Example:
 DiscordMusicBot
   Bot:      RUNNING  PID 25728  started 27/10/2026 2:22:56 AM
   Wrapper:  RUNNING  PID 25792
-  Folder:   D:\DiscordMusicBot
-  Log:      D:\DiscordMusicBot\data\logs\bot.log
+  Folder:   D:\<install-dir>
+  Log:      D:\<install-dir>\data\logs\bot.log
 
 Recent log:
 ...
@@ -224,7 +249,7 @@ This is how the bot is currently running: it launches `run.ps1` in a hidden wind
 npm run stop
 ```
 
-This stops the wrapper **first** (so it cannot restart the bot), then the Node process. You can confirm with `npm run status`. Discord will show the bot as offline briefly.
+This first asks the bot to shut down gracefully through `data\shutdown.request`, so it can restore the channel bitrate, play the leave clip, and clean up child processes. If the bot does not exit within about 15 seconds, the script force-kills the wrapper and Node process. You can confirm with `npm run status`. Discord will show the bot as offline briefly.
 
 ### Restart it
 
@@ -245,6 +270,8 @@ You see the logs live and can stop it with `Ctrl+C`. Do not use this while the h
 ```powershell
 Get-Content .\data\logs\bot.log -Tail 50 -Wait -Encoding UTF8
 ```
+
+Logs rotate at **20 MB** and keep two backups (`bot.log.1`, `bot.log.2`), so the log folder stays around **60 MB**. Docker logs are capped separately in `docker-compose.yml` (3 × 10 MB); on Linux, journald bounds them with `SystemMaxUse`.
 
 ### Headless vs. boot task
 
@@ -335,11 +362,12 @@ docker compose up -d
 | `/stop` | Stop, clear the queue, and leave voice |
 | `/pause` / `/resume` | Pause or resume |
 | `/queue [page]` | Paginated queue with buttons |
-| `/nowplaying` | Current track, progress, and controls |
+| `/nowplaying` | Current track and controls; moves the live card to your request |
 | `/remove <position>` | Remove an upcoming track |
 | `/clear` | Clear upcoming tracks |
 | `/shuffle` | Shuffle upcoming tracks |
 | `/loop <off\|track\|queue>` | Loop mode |
+| `/autoplay [enabled]` | Turn autoplay on/off for this server |
 | `/seek <timestamp>` | Jump to `90`, `1:30`, or `1:02:03` |
 | `/volume <0-200>` | Set volume (100 = source level) |
 | `/move <from> <to>` | Reorder the queue |
@@ -348,11 +376,14 @@ docker compose up -d
 | `/disconnect` | Leave voice and clear the queue |
 | `/help` | In-Discord command list |
 | `/diagnose` | Admin-only host/tool/YouTube check |
+| `/status` | Admin-only uptime, player, cache, and yt-dlp summary |
+| `/cache stats\|clear` | Admin-only cache usage and clearing |
 
 ### DJ behavior
 
 - If `DJ_ROLE_IDS` is empty, **everyone is treated as a DJ**.
 - If one or more DJ roles are configured, members with those roles, or **Manage Server**, can use destructive controls such as `/stop`, `/volume`, `/seek`, `/shuffle`, and `/clear`.
+- `/autoplay` follows the same DJ rule. Its state is stored per server in `data/guild-settings.json`; `AUTOPLAY` in `.env` is only the default for servers that never ran the command.
 - `/skip` is deliberately unrestricted: anyone in the bot’s voice channel can skip one or many tracks.
 - `/pause` and `/resume` are available to anyone in the bot’s voice channel.
 
@@ -389,6 +420,7 @@ Notes:
 
 - YouTube’s normal best audio is ~128 kbps Opus. Paying for YouTube Premium does not guarantee a higher-bitrate stream for every video, but Premium cookies can expose better formats when available.
 - `AUDIO_NORMALIZE=true` enables single-pass loudness normalization. It is off by default because it forces re-encoding and can slightly colour the audio.
+- The Opus passthrough is skipped when `DEFAULT_VOLUME` (or `/volume`) is anything other than 100; ffmpeg then decodes and re-encodes. Leave volume at 100 and use Discord's own per-user volume slider if you want to turn it down without losing the passthrough.
 - Live streams are rejected. This bot is for VOD tracks and mixes.
 
 ---
@@ -404,19 +436,24 @@ All settings live in `.env`.
 | `DISCORD_GUILD_ID` | empty | Register commands in one server instantly. Empty = global. |
 | `DJ_ROLE_IDS` | empty | Comma-separated role IDs for destructive controls. Empty = everyone. |
 | `ALLOWED_TEXT_CHANNEL_IDS` | empty | Comma-separated channel IDs where commands are allowed. Empty = anywhere. |
-| `DEFAULT_VOLUME` | `80` | 0–200. |
+| `DEFAULT_VOLUME` | `100` | 0–200. Any value other than 100 forces re-encoding. |
 | `MAX_QUEUE_SIZE` | `100` | Upcoming tracks per server. |
 | `MAX_TRACK_MINUTES` | `120` | Reject longer videos/mixes. |
 | `MAX_PLAYLIST_ITEMS` | `50` | Tracks imported from one playlist URL. |
 | `IDLE_DISCONNECT_SECONDS` | `300` | Leave voice after queue is empty. `0` disables. |
-| `MAX_BITRATE_KBPS` | `256` | Encoder/channel target, capped by boost tier. |
+| `MAX_BITRATE_KBPS` | `256` | Encoder/channel target, capped by boost tier. Rounded to the nearest 8 kbps. |
 | `PRELOAD_AHEAD` | `3` | Keep this many upcoming tracks downloaded. `0` disables. |
 | `PRELOAD_CONCURRENCY` | `2` | Parallel background downloads (1–4). |
 | `AUTO_SET_CHANNEL_BITRATE` | `true` | Raise channel bitrate when permitted. |
 | `RESTORE_CHANNEL_BITRATE` | `true` | Restore the original bitrate when leaving, if unchanged. |
+| `PAUSE_WHEN_ALONE` | `true` | Pause while no humans are in the voice channel. |
+| `LEAVE_WHEN_ALONE_SECONDS` | `120` | Leave after this long alone. `0` disables. |
+| `AUTOPLAY` | `false` | Default autoplay. `/autoplay` overrides it per server and is remembered across restarts. |
+| `AUTOPLAY_ADD` | `5` | Related tracks added per autoplay fetch (1–10). |
 | `YTDLP_CONCURRENCY` | `4` | Global cap on concurrent yt-dlp processes (1–16). |
 | `COMMAND_COOLDOWN_SECONDS` | `2` | Per-user cooldown for `/play` and `/search`. |
 | `YTDLP_MAX_AGE_DAYS` | `45` | Warn at startup when the installed yt-dlp is older. |
+| `YTDLP_DOWNLOAD_TIMEOUT_MINUTES` | `30` | Per-track download timeout. |
 | `JOIN_SOUND_FILE` | empty | Optional clip played when joining voice. |
 | `LEAVE_SOUND_FILE` | empty | Optional clip played when leaving voice. |
 | `SOUND_VOLUME` | `100` | Volume for join/leave clips (0–200). |
@@ -426,7 +463,10 @@ All settings live in `.env`.
 | `NOW_PLAYING_MESSAGES` | `true` | Send an embed when a track starts. |
 | `YOUTUBE_COOKIES_FILE` | empty | Path to Netscape `cookies.txt`. |
 | `AUDIO_CACHE_MAX_MB` | `2048` | Disk cache cap. |
+| `AUDIO_CACHE_DIR` | `./data/cache` | Downloaded audio location. |
 | `DATA_DIR` | `./data` | Cache, cookies, logs, command hash. |
+| `TEMP_DIR` | `./data/tmp` | Temp files for yt-dlp/ffmpeg. |
+| `YTDLP_CACHE_DIR` | `./data/yt-dlp-cache` | yt-dlp signature/player caches. |
 | `FFMPEG_PATH` | bundled | Override ffmpeg binary. |
 | `YTDLP_PATH` | `tools/yt-dlp` | Override yt-dlp binary. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`, `silent`. |
@@ -513,12 +553,6 @@ Audio downloads are cached in:
 
 ```
 <project>\data\cache\
-```
-
-For this installation that is:
-
-```
-D:\DiscordMusicBot\data\cache\
 ```
 
 Files are named after the YouTube video ID, for example `dQw4w9WgXcQ.webm`. The `.webm` file is audio-only (usually Opus); no video is downloaded. The bot also uses:

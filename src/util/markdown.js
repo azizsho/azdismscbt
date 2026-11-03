@@ -24,8 +24,3 @@ export function truncate(value, max) {
   if (max <= 1) return '…';
   return `${text.slice(0, max - 1)}…`;
 }
-
-/** Escape a URL for embedding in angle brackets (prevents Discord unfurling). */
-export function noUnfurl(url) {
-  return `<${url}>`;
-}

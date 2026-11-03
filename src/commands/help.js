@@ -9,9 +9,12 @@ export default {
 
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
-   * @param {{ config: ReturnType<import('../config.js').loadConfig> }} ctx
+   * @param {{
+   *   config: ReturnType<typeof import('../config.js').loadConfig>,
+   *   commands: Array<{ data: { name: string, description: string } }>,
+   * }} ctx
    */
   async execute(interaction, ctx) {
-    await interaction.reply({ embeds: [helpEmbed(ctx.config)] });
+    await interaction.reply({ embeds: [helpEmbed(ctx.config, ctx.commands)] });
   },
 };

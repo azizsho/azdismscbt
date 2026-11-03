@@ -34,8 +34,9 @@ const cache = new MediaCache({
   maxBytes: config.cacheMaxBytes,
   youtube: { download: async () => { throw new Error('diagnostics only'); } },
   logger: createLogger('silent', 'doctor-cache'),
+  tempDir: config.tempDir,
 });
-await cache.init();
+await cache.init({ prune: false });
 
 const checks = await runDiagnostics(config, cache, logger);
 
@@ -65,6 +66,21 @@ if (config.token) {
   }
 } else {
   checks.push({ name: 'Discord token', ok: false, detail: 'DISCORD_TOKEN is empty' });
+}
+
+if (process.platform !== 'win32') {
+  const secretFiles = [path.join(root, '.env')];
+  if (config.cookiesFile) secretFiles.push(config.cookiesFile);
+  for (const file of secretFiles) {
+    try {
+      const mode = fs.statSync(file).mode & 0o777;
+      if (mode & 0o077) {
+        console.warn(`WARNING: ${file} is accessible by group/other (mode ${mode.toString(8)}). Run: chmod 600 ${file}`);
+      }
+    } catch {
+      // Missing files are reported by the main checks.
+    }
+  }
 }
 
 let failures = 0;

@@ -5,26 +5,44 @@ import { formatDuration, formatProgress } from '../util/time.js';
 /** Rows shown on the standalone queue card and the /play confirmation cards. */
 export const QUEUE_PREVIEW_LIMIT = 10;
 
-/** @param {import('../music/youtube.js').Track} track */
-function previewLine(track, index) {
-  return `\`${String(index + 1).padStart(2, ' ')}.\` ${trackTitle(track, 30)} \`${formatDuration(track.durationSec)}\``;
-}
-
 /**
- * @param {import('../music/youtube.js').Track[]} tracks
- * @param {number} limit
+ * @param {import('../music/youtube.js').Track} track
+ * @param {{ requester?: boolean, etaSeconds?: number }} [options]
  */
-function previewLines(tracks, limit) {
-  return tracks.slice(0, limit).map((track, index) => previewLine(track, index));
+function trackMeta(track, options = {}) {
+  const parts = [];
+  if (options.requester && track.requester) {
+    parts.push(escapeMarkdown(truncate(requesterName(track), 20)));
+  }
+  if (options.etaSeconds !== undefined) parts.push(`~${formatDuration(options.etaSeconds)}`);
+  return parts.length > 0 ? ` · ${parts.join(' · ')}` : '';
+}
+
+/**
+ * @param {import('../music/youtube.js').Track} track
+ * @param {number} index
+ * @param {{ requester?: boolean, etaSeconds?: number }} [options]
+ */
+function previewLine(track, index, options = {}) {
+  return `\`${String(index + 1).padStart(2, ' ')}.\` ${trackTitle(track, 30)} \`${formatDuration(track.durationSec)}\`${trackMeta(track, options)}`;
 }
 
 /**
  * @param {import('../music/youtube.js').Track[]} tracks
  * @param {number} limit
- * @param {{ remainder?: boolean }} [options]
+ * @param {{ requester?: boolean, etaSeconds?: number }} [options]
+ */
+function previewLines(tracks, limit, options = {}) {
+  return tracks.slice(0, limit).map((track, index) => previewLine(track, index, options));
+}
+
+/**
+ * @param {import('../music/youtube.js').Track[]} tracks
+ * @param {number} limit
+ * @param {{ remainder?: boolean, requester?: boolean, etaSeconds?: number }} [options]
  */
 function previewValue(tracks, limit, options = {}) {
-  const lines = previewLines(tracks, limit);
+  const lines = previewLines(tracks, limit, options);
   if (options.remainder !== false && tracks.length > limit) {
     lines.push(`…and **${tracks.length - limit}** more — use \`/queue\``);
   }
@@ -32,7 +50,7 @@ function previewValue(tracks, limit, options = {}) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {string} [title]
  */
 function baseEmbed(config, title) {
@@ -58,7 +76,7 @@ export function requesterName(track) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/youtube.js').Track} track
  * @param {{ position?: number, playlist?: string, queue?: import('../music/youtube.js').Track[] }} [options]
  */
@@ -85,13 +103,33 @@ export function addedEmbed(config, track, options = {}) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
- * @param {{ title: string, count: number, skipped?: number, queue?: import('../music/youtube.js').Track[] }} playlist
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+ * @param {{
+ *   title: string,
+ *   count: number,
+ *   skipped?: number,
+ *   skippedUnavailable?: number,
+ *   skippedCapacity?: number,
+ *   total?: number,
+ *   truncated?: boolean,
+ *   queue?: import('../music/youtube.js').Track[],
+ * }} playlist
  */
 export function playlistAddedEmbed(config, playlist) {
-  const skippedText = playlist.skipped ? ` Skipped ${playlist.skipped} unavailable/too-long track(s).` : '';
+  const notes = [];
+  if (playlist.truncated && playlist.total) {
+    notes.push(`Showing the first **${playlist.count}** of **${playlist.total}** tracks.`);
+  }
+  const unavailable = playlist.skippedUnavailable ?? playlist.skipped ?? 0;
+  if (unavailable > 0) notes.push(`Skipped **${unavailable}** unplayable or too-long track(s).`);
+  if (playlist.skippedCapacity > 0) {
+    notes.push(`Skipped **${playlist.skippedCapacity}** because the queue was full.`);
+  }
+
   const embed = baseEmbed(config, 'Playlist added').setDescription(
-    `Queued **${playlist.count}** track(s) from **${escapeMarkdown(truncate(playlist.title, 100))}**.${skippedText}`,
+    `Queued **${playlist.count}** track(s) from **${escapeMarkdown(truncate(playlist.title, 100))}**.${
+      notes.length > 0 ? ` ${notes.join(' ')}` : ''
+    }`,
   );
   if (playlist.queue?.length) {
     embed.addFields({ name: 'Up next', value: previewValue(playlist.queue, QUEUE_PREVIEW_LIMIT) });
@@ -102,10 +140,11 @@ export function playlistAddedEmbed(config, playlist) {
 /**
  * A standalone card that follows the now-playing message.
  *
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/youtube.js').Track[]} tracks
+ * @param {{ currentRemainingSec?: number }} [options]
  */
-export function queueBoardEmbed(config, tracks) {
+export function queueBoardEmbed(config, tracks, options = {}) {
   if (tracks.length === 0) {
     return baseEmbed(config, 'Queue').setDescription('*The queue is empty.*');
   }
@@ -116,13 +155,20 @@ export function queueBoardEmbed(config, tracks) {
       ? `Showing ${QUEUE_PREVIEW_LIMIT} of ${tracks.length} • ${formatDuration(totalSec)} total • /queue for the full list`
       : `${tracks.length} track(s) • ${formatDuration(totalSec)} total`;
 
+  let eta = Math.max(0, Math.floor(options.currentRemainingSec ?? 0));
+  const lines = tracks.slice(0, QUEUE_PREVIEW_LIMIT).map((track, index) => {
+    const line = previewLine(track, index, { requester: true, etaSeconds: eta });
+    eta += track.durationSec ?? 0;
+    return line;
+  });
+
   return baseEmbed(config, 'Queue')
-    .setDescription(truncate(previewLines(tracks, QUEUE_PREVIEW_LIMIT).join('\n'), 4000))
+    .setDescription(truncate(lines.join('\n'), 4000))
     .setFooter({ text: truncate(footer, 2048) });
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/guild-player.js').GuildPlayer} player
  */
 export function nowPlayingEmbed(config, player) {
@@ -133,7 +179,7 @@ export function nowPlayingEmbed(config, player) {
 
   const positionMs = player.positionMs;
   const durationSec = track.durationSec;
-  const embed = baseEmbed(config, track.title)
+  const embed = baseEmbed(config, truncate(escapeMarkdown(track.title), 256))
     .setDescription(
       `${formatProgress(Math.floor(positionMs / 1000), durationSec)}\n` +
         `${escapeMarkdown(track.channel ?? 'Unknown channel')} • requested by ${escapeMarkdown(requesterName(track))}`,
@@ -153,7 +199,7 @@ export function nowPlayingEmbed(config, player) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/guild-player.js').GuildPlayer} player
  * @param {number} page 1-based
  * @param {number} pageSize
@@ -176,6 +222,12 @@ export function queueEmbed(config, player, page, pageSize = 10) {
     lines.push('**Now playing**\nNothing.');
   }
 
+  let eta =
+    player.current?.durationSec !== null && player.current?.durationSec !== undefined
+      ? Math.max(0, player.current.durationSec - Math.floor(player.positionMs / 1000))
+      : 0;
+  for (let i = 0; i < start; i++) eta += tracks[i]?.durationSec ?? 0;
+
   lines.push('');
   if (slice.length === 0) {
     lines.push('*The queue is empty.*');
@@ -185,8 +237,9 @@ export function queueEmbed(config, player, page, pageSize = 10) {
       const track = slice[i];
       const position = start + i + 1;
       lines.push(
-        `\`${String(position).padStart(2, ' ')}.\` ${trackTitle(track)} \`${formatDuration(track.durationSec)}\``,
+        `\`${String(position).padStart(2, ' ')}.\` ${trackTitle(track)} \`${formatDuration(track.durationSec)}\`${trackMeta(track, { requester: true, etaSeconds: eta })}`,
       );
+      eta += track.durationSec ?? 0;
     }
   }
 
@@ -201,7 +254,7 @@ export function queueEmbed(config, player, page, pageSize = 10) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {import('../music/youtube.js').Track[]} tracks
  * @param {string} query
  */
@@ -213,13 +266,12 @@ export function searchEmbed(config, tracks, query) {
     );
   });
 
-  return baseEmbed(config, `Search results for “${truncate(query, 80)}”`)
+  return baseEmbed(config, `Search results for “${truncate(escapeMarkdown(query), 80)}”`)
     .setDescription(truncate(lines.join('\n') || 'No results.', 4000))
     .setFooter({ text: 'Pick a track from the dropdown below to add it to the queue.' });
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
  * @param {Array<{ id: string, title: string, durationSec: number | null, channel: string | null }>} tracks
  */
 export function searchSelectOptions(tracks) {
@@ -234,8 +286,8 @@ export function searchSelectOptions(tracks) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
- * @param {Array<{ name: string, playedAt: number }>} history
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+ * @param {Array<import('../music/youtube.js').Track & { playedAt: number }>} history
  */
 export function historyEmbed(config, history) {
   if (history.length === 0) {
@@ -250,40 +302,59 @@ export function historyEmbed(config, history) {
   return baseEmbed(config, 'Play history').setDescription(truncate(lines.join('\n'), 4000));
 }
 
-/** @param {ReturnType<import('../config.js').loadConfig>} config */
-export function helpEmbed(config) {
+/**
+ * Command names grouped for `/help`. Unknown commands fall into "More", so the
+ * help text cannot drift when a command is added.
+ */
+/** @type {Array<[string, string[]]>} */
+const HELP_GROUPS = [
+  ['Playback', ['play', 'search', 'pause', 'resume', 'skip', 'stop', 'seek', 'volume', 'loop', 'autoplay']],
+  ['Queue', ['queue', 'nowplaying', 'remove', 'move', 'jump', 'shuffle', 'clear']],
+  ['Other', ['history', 'disconnect', 'help', 'diagnose', 'status', 'cache']],
+];
+
+/**
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
+ * @param {Array<{ data: { name: string, description: string } }>} [commands]
+ */
+export function helpEmbed(config, commands = []) {
+  const byName = new Map(commands.map((command) => [command.data.name, command.data.description]));
+  const used = new Set();
+  const sections = [];
+
+  for (const [label, names] of HELP_GROUPS) {
+    const lines = names
+      .filter((name) => byName.has(name))
+      .map((name) => {
+        used.add(name);
+        return `\`/${name}\` — ${byName.get(name)}`;
+      });
+    if (lines.length > 0) sections.push(`**${label}**\n${lines.join('\n')}`);
+  }
+
+  const extra = commands
+    .filter((command) => !used.has(command.data.name))
+    .map((command) => `\`/${command.data.name}\` — ${command.data.description}`);
+  if (extra.length > 0) sections.push(`**More**\n${extra.join('\n')}`);
+
   return baseEmbed(config, 'YouTube Music Bot')
     .setDescription(
-      [
-        'A self-hosted music bot that streams the best available audio from YouTube.',
-        '',
-        '**Playback**',
-        '`/play <query>` — search YouTube or add a video/playlist',
-        '`/search <query>` — browse results and choose a track',
-        '`/pause` · `/resume` · `/skip [count]` · `/stop`',
-        '`/seek <time>` · `/volume <0-200>` · `/loop <off|track|queue>`',
-        '',
-        '**Queue**',
-        '`/queue [page]` · `/nowplaying` · `/remove <position>`',
-        '`/move <from> <to>` · `/jump <position>` · `/shuffle` · `/clear`',
-        '',
-        '**Other**',
-        '`/history` · `/disconnect` · `/help`',
-        '`/diagnose` — admin tool check',
-        '',
-        'If a DJ role is configured, destructive controls require that role (or Manage Server).',
-      ].join('\n'),
+      truncate(
+        [
+          'A self-hosted music bot that streams the best available audio from YouTube.',
+          '',
+          ...sections,
+          '',
+          'If a DJ role is configured, destructive controls require that role (or Manage Server).',
+        ].join('\n'),
+        4000,
+      ),
     )
     .setFooter({ text: 'Tip: use a boosted voice channel and set its bitrate for the best quality.' });
 }
 
-/** @param {ReturnType<import('../config.js').loadConfig>} config */
-export function helpCommandLines() {
-  return helpEmbed(config);
-}
-
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {string} description
  */
 export function successEmbed(config, title, description) {
@@ -291,7 +362,7 @@ export function successEmbed(config, title, description) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {string} description
  */
 export function errorEmbed(config, description) {
@@ -303,18 +374,7 @@ export function errorEmbed(config, description) {
 }
 
 /**
- * @param {ReturnType<import('../config.js').loadConfig>} config
- * @param {string} description
- */
-export function warningEmbed(config, description) {
-  return new EmbedBuilder()
-    .setColor(0xfee75c)
-    .setTitle('Heads up')
-    .setDescription(truncate(description, 4000));
-}
-
-/**
- * @param {ReturnType<import('../config.js').loadConfig>} config
+ * @param {ReturnType<typeof import('../config.js').loadConfig>} config
  * @param {Array<{ name: string, ok: boolean, detail: string }>} checks
  */
 export function diagnosticsEmbed(config, checks) {

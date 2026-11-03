@@ -54,6 +54,20 @@ if ($wrapperIds.Count -eq 0 -and $nodeIds.Count -eq 0) {
     exit 0
 }
 
+# Ask the bot to shut down gracefully first (restores channel bitrate, plays the
+# leave clip, cleans up child processes). Force-kill only if it does not exit.
+if ($nodeIds.Count -gt 0) {
+    $requestFile = Join-Path $dataDir 'shutdown.request'
+    Set-Content -LiteralPath $requestFile -Value '1' -Encoding ASCII -ErrorAction SilentlyContinue
+    $deadline = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $deadline) {
+        $alive = @($nodeIds | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+        if ($alive.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    Remove-Item -LiteralPath $requestFile -Force -ErrorAction SilentlyContinue
+}
+
 foreach ($wrapperId in $wrapperIds) {
     Stop-Process -Id $wrapperId -Force -ErrorAction SilentlyContinue
 }

@@ -1,10 +1,13 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { once } from 'node:events';
 import { createAudioResource, StreamType } from '@discordjs/voice';
 import { UserError } from '../util/errors.js';
+import { buildChildEnv } from '../util/child-env.js';
 
-const OPUS_EXTENSIONS = new Set(['.webm', '.opus', '.ogg']);
+// `.webm` is deliberately excluded: YouTube's fallback format can be Vorbis
+// inside WebM, and copying that into an Ogg/Opus stream does not play. A
+// successful codec probe is required before treating WebM as Opus.
+const OPUS_EXTENSIONS = new Set(['.opus', '.ogg']);
 const MAX_STDERR_BYTES = 16 * 1024;
 
 /**
@@ -18,6 +21,7 @@ const MAX_STDERR_BYTES = 16 * 1024;
 export async function probeAudioCodec(filePath, ffmpegPath) {
   return new Promise((resolve) => {
     const child = spawn(ffmpegPath, ['-hide_banner', '-i', filePath], {
+      env: buildChildEnv(),
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'pipe'],
     });
@@ -68,7 +72,7 @@ export function isOpusSource(filePath, codec) {
  *   bitrateKbps: number,
  *   ffmpegPath: string,
  *   tempDir: string,
- *   logger: ReturnType<import('../logger.js').createLogger>,
+ *   logger: ReturnType<typeof import('../logger.js').createLogger>,
  * }} options
  */
 export function createPlaybackResource(options) {
@@ -141,12 +145,11 @@ export function createPlaybackResource(options) {
 
   const child = spawn(ffmpegPath, args, {
     cwd: path.dirname(filePath),
-    env: {
-      ...process.env,
+    env: buildChildEnv({
       TEMP: tempDir,
       TMP: tempDir,
       TMPDIR: tempDir,
-    },
+    }),
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -189,10 +192,4 @@ export function createPlaybackResource(options) {
   });
 
   return { resource, process: child, cleanup, completion, copy };
-}
-
-/** Wait for a child process to close, returning its exit code. */
-export async function waitForExit(child) {
-  const [code] = await once(child, 'close');
-  return code;
 }

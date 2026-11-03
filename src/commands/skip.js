@@ -19,7 +19,7 @@ export default {
 
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
-   * @param {{ config: ReturnType<import('../config.js').loadConfig>, music: import('../music/manager.js').MusicManager }} ctx
+   * @param {{ config: ReturnType<typeof import('../config.js').loadConfig>, music: import('../music/manager.js').MusicManager }} ctx
    */
   async execute(interaction, ctx) {
     const player = requirePlayer(interaction, ctx.music, { requireSameChannel: true });
@@ -31,7 +31,7 @@ export default {
 
     const result = player.skip(count);
     const title = result.skipped?.title ?? 'the current download';
-    const extra = count > 1 ? ` and ${count - 1} upcoming track(s)` : '';
+    const extra = result.removedUpcoming > 0 ? ` and ${result.removedUpcoming} upcoming track(s)` : '';
     await interaction.reply({
       embeds: [successEmbed(ctx.config, 'Skipped', `Skipped **${title}**${extra}.`)],
     });
